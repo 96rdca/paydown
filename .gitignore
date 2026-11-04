@@ -2,6 +2,11 @@
 AGENTS.md
 CLAUDE.md
 opencode.json
+.graphifyignore
+graphify-out/
+
+# app-owned local data (rates, payment log, abonos)
+/data/
 
 # dependencies
 /node_modules

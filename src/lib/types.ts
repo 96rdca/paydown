@@ -182,3 +182,100 @@ export interface Snapshot {
   loans: Loan[];
   savings: SavingsPlan | null;
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+ * App-owned overlay (stored locally by the app — NOT in the Google Sheet).
+ * The sheet stays the read-only source of truth for base data; rates,
+ * payment logs and abonos live here until Phase 2 moves them into an
+ * app-owned sheet tab.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+export interface CardOverlayConfig {
+  /** Monthly interest rate as a fraction (e.g. 0.0255 = 2.55 %/mes). */
+  monthlyRate: number | null;
+}
+
+export interface CardPayment {
+  id: string;
+  cardId: string;
+  /** ISO date the payment was made. */
+  date: string;
+  amountDop: number;
+  amountUsd: number | null;
+  note: string | null;
+}
+
+export interface LoanAbono {
+  id: string;
+  loanId: string;
+  /** ISO date the extra payment was applied. */
+  date: string;
+  amount: number;
+  note: string | null;
+}
+
+export interface Overlay {
+  /** Overlay file format version. */
+  version: 1;
+  /** Keyed by CardAccount.id. */
+  cards: Record<string, CardOverlayConfig>;
+  cardPayments: CardPayment[];
+  loanAbonos: LoanAbono[];
+}
+
+/* ── Projections (always computed, never stored) ── */
+
+export interface MinPayoff {
+  months: number;
+  totalInterest: number;
+  totalPaid: number;
+  /** ISO date of the final payment. */
+  endDate: string;
+}
+
+export interface CardProjection {
+  /** One month of interest on the current statement balance, DOP-combined. */
+  monthlyInterestDop: number;
+  /** Pay this now (DOP-combined) to zero the card without interest. */
+  payoffNowDop: number;
+  /** Simulation paying only the minimum each month. */
+  minPayoff: MinPayoff | null;
+  /** Human-readable reason when minPayoff cannot be computed. */
+  minPayoffBlockedReason: string | null;
+}
+
+export interface ProjectionTotals {
+  months: number;
+  totalInterest: number;
+  /** ISO date of the final payment. */
+  endDate: string;
+}
+
+export interface LoanProjection {
+  /** Remaining cost if nothing extra is ever paid (from current state). */
+  baseline: ProjectionTotals;
+  /** Remaining cost with every persisted abono applied at its date. */
+  withAbonos: ProjectionTotals;
+  interestSaved: number;
+  monthsSaved: number;
+  /** Regenerated remaining schedule with abonos applied. */
+  projectedSchedule: LoanInstallment[];
+}
+
+export interface AugmentedCard extends CardAccount {
+  payments: CardPayment[];
+  /** Null until a monthly rate is configured in the overlay. */
+  projection: CardProjection | null;
+}
+
+export interface AugmentedLoan extends Loan {
+  abonos: LoanAbono[];
+  /** Null when the loan lacks the inputs a projection needs. */
+  projection: LoanProjection | null;
+}
+
+export interface FinancialState {
+  snapshot: Snapshot;
+  cards: AugmentedCard[];
+  loans: AugmentedLoan[];
+}

@@ -63,6 +63,13 @@ export function formatAnnualRate(value: number | null | undefined): string {
   return `${(value * 100).toFixed(2)}%`;
 }
 
+export function formatMonthlyRate(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+  return `${(value * 100).toFixed(2)}%/mes`;
+}
+
 const esDate = new Intl.DateTimeFormat("es-DO", {
   day: "numeric",
   month: "short",
@@ -166,4 +173,21 @@ export function isoDayOfMonth(
   const d = nextOccurrenceDay(dayOfMonth, from);
   if (!d) return null;
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Parse a money input written in Spanish/Dominican notation.
+ * Accepts both "1500", "1.500" and "1500,50"; comma is treated as the
+ * decimal separator when present.
+ */
+export function parseMoneyInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  const hasComma = trimmed.includes(",");
+  const normalized = hasComma
+    ? trimmed.replace(/\./g, "").replace(",", ".")
+    : trimmed;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
 }

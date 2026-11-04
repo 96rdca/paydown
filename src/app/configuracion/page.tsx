@@ -1,8 +1,9 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
-import { getSnapshot } from "@/lib/sheets/snapshot";
+import { getFinancialState } from "@/lib/state";
 import { Footer } from "@/components/footer";
 import { ConfigForm } from "@/components/config-form";
+import { LocalDataCard } from "@/components/local-data-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -25,23 +26,29 @@ function ConfiguracionSkeleton() {
           </CardContent>
         </Card>
       </div>
+      <Card>
+        <CardContent className="py-8">
+          <Skeleton className="h-24 w-full" />
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 async function ConfiguracionContent() {
   await io();
-  const snapshot = await getSnapshot();
+  const state = await getFinancialState();
 
   return (
     <div className="space-y-8">
       <ConfigForm
         initial={{
-          fetchedAt: snapshot.fetchedAt,
-          usdRate: snapshot.settings.usdRate,
+          fetchedAt: state.snapshot.fetchedAt,
+          usdRate: state.snapshot.settings.usdRate,
         }}
       />
-      <Footer snapshot={snapshot} />
+      <LocalDataCard state={state} />
+      <Footer snapshot={state.snapshot} />
     </div>
   );
 }

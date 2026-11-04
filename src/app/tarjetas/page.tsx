@@ -1,18 +1,21 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
-import { getSnapshot } from "@/lib/sheets/snapshot";
-import { formatDop, formatUsd } from "@/lib/format";
+import { getFinancialState } from "@/lib/state";
+import { formatDop, formatUsd, formatMonthlyRate } from "@/lib/format";
 import { MoneyInline } from "@/components/money";
 import { Footer } from "@/components/footer";
+import { CardRateDialog } from "@/components/card-rate-dialog";
+import { CardInterestPanel } from "@/components/card-interest-panel";
+import { CardPayments } from "@/components/card-payments";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { CardAccount, CardTotals } from "@/lib/types";
+import type { AugmentedCard, CardTotals } from "@/lib/types";
 import { CreditCard } from "lucide-react";
 
-function cardUtilization(card: CardAccount, rate: number): number | null {
+function cardUtilization(card: AugmentedCard, rate: number): number | null {
   const limitDop = card.limitDop ?? 0;
   const limitUsdDop = (card.limitUsd ?? 0) * rate;
   const balanceDop = card.statementBalanceDop ?? 0;
@@ -25,12 +28,12 @@ function cardUtilization(card: CardAccount, rate: number): number | null {
   return Math.min(100, Math.round((balance / limit) * 100));
 }
 
-function CardItem({ card, rate }: { card: CardAccount; rate: number }) {
+function CardItem({ card, rate }: { card: AugmentedCard; rate: number }) {
   const util = cardUtilization(card, rate);
   return (
     <Card className="transition-shadow hover:shadow-sm">
       <CardHeader className="pb-2">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="rounded-lg bg-primary/10 p-2 text-primary">
               <CreditCard className="size-4" />
@@ -38,36 +41,34 @@ function CardItem({ card, rate }: { card: CardAccount; rate: number }) {
             <div>
               <CardTitle className="text-base">{card.bank}</CardTitle>
               <CardDescription className="text-xs">
-                Corte {card.closingDay ?? "—"} · Vence{" "}
-                {card.dueDay ?? "—"}
+                Corte {card.closingDay ?? "—"} · Vence {card.dueDay ?? "—"}
               </CardDescription>
             </div>
           </div>
-          {util !== null && (
-            <Badge
-              variant="secondary"
-              className={
-                util >= 80
-                  ? "bg-red-500/10 text-red-600"
-                  : util >= 50
-                    ? "bg-amber-500/10 text-amber-600"
-                    : "bg-emerald-500/10 text-emerald-600"
-              }
-            >
-              {util}%
-            </Badge>
-          )}
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {util !== null && (
+              <Badge
+                variant="secondary"
+                className={
+                  util >= 80
+                    ? "bg-red-500/10 text-red-600"
+                    : util >= 50
+                      ? "bg-amber-500/10 text-amber-600"
+                      : "bg-emerald-500/10 text-emerald-600"
+                }
+              >
+                {util}%
+              </Badge>
+            )}
+            <CardRateDialog cardId={card.id} bank={card.bank} currentRate={card.monthlyRate} />
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-3 gap-2 text-sm">
           <div>
             <p className="text-xs text-muted-foreground">Límite</p>
-            <MoneyInline
-              dop={card.limitDop}
-              usd={card.limitUsd}
-              rate={rate}
-            />
+            <MoneyInline dop={card.limitDop} usd={card.limitUsd} rate={rate} />
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Balance</p>
@@ -86,19 +87,19 @@ function CardItem({ card, rate }: { card: CardAccount; rate: number }) {
             />
           </div>
         </div>
-        {util !== null ? (
-          <Progress
-            value={util}
-            className="h-1.5"
-          />
-        ) : null}
+        {util !== null ? <Progress value={util} className="h-1.5" /> : null}
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
-            Pago mínimo: {formatDop(card.minPaymentDop)} /{" "}
-            {formatUsd(card.minPaymentUsd)}
+            Pago mínimo: {formatDop(card.minPaymentDop)} / {formatUsd(card.minPaymentUsd)}
           </span>
-          <span>Tasa: por configurar</span>
+          <span>
+            {card.monthlyRate !== null ? formatMonthlyRate(card.monthlyRate) : "Tasa: por configurar"}
+          </span>
         </div>
+
+        {card.projection && <CardInterestPanel projection={card.projection} />}
+        <Separator />
+        <CardPayments card={card} />
       </CardContent>
     </Card>
   );
@@ -125,8 +126,11 @@ function TarjetasSkeleton() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <Card key={i}>
-            <CardContent className="py-8">
+            <CardContent className="space-y-4 py-6">
               <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-16 w-full" />
             </CardContent>
           </Card>
         ))}
@@ -137,16 +141,16 @@ function TarjetasSkeleton() {
 
 async function TarjetasContent() {
   await io();
-  const snapshot = await getSnapshot();
-  const rate = snapshot.settings.usdRate;
-  const totals: CardTotals = snapshot.cardTotals;
+  const state = await getFinancialState();
+  const rate = state.snapshot.settings.usdRate;
+  const totals: CardTotals = state.snapshot.cardTotals;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Tarjetas</h1>
         <p className="text-muted-foreground">
-          Límites, balances y disponibilidad.
+          Límites, balances, tasas y pagos registrados.
         </p>
       </div>
 
@@ -154,11 +158,7 @@ async function TarjetasContent() {
         <Card>
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground">Límite total</p>
-            <MoneyInline
-              dop={totals.limitDop}
-              usd={totals.limitUsd}
-              rate={rate}
-            />
+            <MoneyInline dop={totals.limitDop} usd={totals.limitUsd} rate={rate} />
           </CardContent>
         </Card>
         <Card>
@@ -196,12 +196,12 @@ async function TarjetasContent() {
       <Separator />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {snapshot.cards.map((card: CardAccount) => (
+        {state.cards.map((card: AugmentedCard) => (
           <CardItem key={card.id} card={card} rate={rate} />
         ))}
       </div>
 
-      <Footer snapshot={snapshot} />
+      <Footer snapshot={state.snapshot} />
     </div>
   );
 }

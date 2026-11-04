@@ -1,50 +1,20 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
-import { getSnapshot } from "@/lib/sheets/snapshot";
-import { formatDop, formatDate, formatAnnualRate } from "@/lib/format";
+import { getFinancialState } from "@/lib/state";
+import { formatDop, formatDate, formatAnnualRate, formatInteger } from "@/lib/format";
 import { Footer } from "@/components/footer";
+import { LoanAbonoSimulator } from "@/components/loan-abono-simulator";
+import { LoanAbonosList } from "@/components/loan-abonos-list";
+import { LoanScheduleTabs } from "@/components/loan-schedule-tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import type { Loan, LoanInstallment } from "@/lib/types";
-import { Landmark, PiggyBank } from "lucide-react";
+import type { AugmentedLoan, LoanInstallment } from "@/lib/types";
+import { Landmark, PiggyBank, Calendar, Clock, Sparkles } from "lucide-react";
 
-function statusBadge(status: LoanInstallment["status"]) {
-  switch (status) {
-    case "paid":
-      return (
-        <Badge
-          variant="secondary"
-          className="bg-emerald-500/10 text-emerald-600"
-        >
-          Pagada
-        </Badge>
-      );
-    case "extra":
-      return (
-        <Badge
-          variant="secondary"
-          className="bg-blue-500/10 text-blue-600"
-        >
-          Abono
-        </Badge>
-      );
-    default:
-      return <Badge variant="outline">Pendiente</Badge>;
-  }
-}
-
-function LoanCard({ loan }: { loan: Loan }) {
+function LoanCard({ loan }: { loan: AugmentedLoan }) {
   const totalCount =
     (loan.summary.paidCount ?? 0) + (loan.summary.remainingCount ?? 0);
   const progress =
@@ -73,10 +43,7 @@ function LoanCard({ loan }: { loan: Loan }) {
             </div>
           </div>
           {loan.summary.interestSaved ? (
-            <Badge
-              variant="secondary"
-              className="bg-emerald-500/10 text-emerald-600"
-            >
+            <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600">
               <PiggyBank className="mr-1 size-3" /> Interés ahorrado{" "}
               {formatDop(loan.summary.interestSaved)}
             </Badge>
@@ -113,6 +80,48 @@ function LoanCard({ loan }: { loan: Loan }) {
           <Progress value={progress} />
         </div>
 
+        {loan.projection && (
+          <div className="space-y-3 rounded-lg bg-muted/50 p-3">
+            <p className="text-xs font-medium text-muted-foreground">Proyección de pagos restantes</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Calendar className="size-3" /> Según hoja
+                </p>
+                <p className="text-sm font-medium">
+                  {formatInteger(loan.projection.baseline.months)} meses ·{" "}
+                  {formatDop(loan.projection.baseline.totalInterest)} intereses
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Termina {formatDate(loan.projection.baseline.endDate)}
+                </p>
+              </div>
+              {loan.abonos.length > 0 ? (
+                <div>
+                  <p className="flex items-center gap-1 text-xs text-emerald-600">
+                    <Sparkles className="size-3" /> Con tus abonos
+                  </p>
+                  <p className="text-sm font-medium text-emerald-600">
+                    {formatInteger(loan.projection.withAbonos.months)} meses ·{" "}
+                    {formatDop(loan.projection.withAbonos.totalInterest)} intereses
+                  </p>
+                  <p className="text-xs text-emerald-600">
+                    Termina {formatDate(loan.projection.withAbonos.endDate)}
+                  </p>
+                  <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                    Ahorras {formatInteger(loan.projection.monthsSaved)} meses y{" "}
+                    {formatDop(loan.projection.interestSaved)}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center text-xs text-muted-foreground">
+                  <Clock className="mr-1 size-3" /> Sin abonos registrados.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {loan.extras.length > 0 && (
           <div className="grid gap-2 rounded-lg bg-muted/50 p-3 text-sm sm:grid-cols-2">
             {loan.extras.map((extra, idx) => (
@@ -128,60 +137,6 @@ function LoanCard({ loan }: { loan: Loan }) {
   );
 }
 
-function ScheduleTable({ loan }: { loan: Loan }) {
-  return (
-    <div className="rounded-xl border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>#</TableHead>
-            <TableHead>Fecha</TableHead>
-            <TableHead className="text-right">Saldo inicial</TableHead>
-            <TableHead className="text-right">Interés</TableHead>
-            <TableHead className="text-right">Capital</TableHead>
-            <TableHead className="text-right">Total</TableHead>
-            <TableHead className="text-right">Saldo final</TableHead>
-            <TableHead className="text-right">Abonado</TableHead>
-            <TableHead>Estado</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {loan.schedule.map((inst: LoanInstallment) => (
-            <TableRow
-              key={inst.number}
-              className={
-                inst.status === "pending" ? "bg-muted/30" : undefined
-              }
-            >
-              <TableCell className="font-medium">{inst.number}</TableCell>
-              <TableCell>{formatDate(inst.date)}</TableCell>
-              <TableCell className="text-right">
-                {formatDop(inst.beginningBalance)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatDop(inst.interest)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatDop(inst.principal)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatDop(inst.totalPayment)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatDop(inst.endingBalance)}
-              </TableCell>
-              <TableCell className="text-right">
-                {inst.extraPayment ? formatDop(inst.extraPayment) : "—"}
-              </TableCell>
-              <TableCell>{statusBadge(inst.status)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
 function PrestamosSkeleton() {
   return (
     <div className="space-y-8">
@@ -192,8 +147,10 @@ function PrestamosSkeleton() {
       {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="space-y-4">
           <Card>
-            <CardContent className="py-8">
+            <CardContent className="space-y-4 py-6">
               <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-24 w-full" />
             </CardContent>
           </Card>
           <div className="space-y-2">
@@ -209,34 +166,40 @@ function PrestamosSkeleton() {
 
 async function PrestamosContent() {
   await io();
-  const snapshot = await getSnapshot();
+  const state = await getFinancialState();
+  const rate = state.snapshot.settings.usdRate;
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Préstamos</h1>
         <p className="text-muted-foreground">
-          Estado y cronogramas de cada préstamo.
+          Estado, cronogramas y simulador de abonos.
         </p>
       </div>
 
       <div className="space-y-8">
-        {snapshot.loans.map((loan: Loan) => (
+        {state.loans.map((loan: AugmentedLoan) => (
           <div key={loan.id} className="space-y-4">
             <LoanCard loan={loan} />
-            {loan.schedule.length > 0 ? (
-              <ScheduleTable loan={loan} />
-            ) : (
-              <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-                {loan.name} no tiene cronograma detallado.
-              </div>
+            {loan.projection && (
+              <>
+                <LoanAbonoSimulator loan={loan} usdRate={rate} />
+                <LoanAbonosList loan={loan} />
+              </>
             )}
+            <LoanScheduleTabs loan={loan} />
             <Separator />
           </div>
         ))}
       </div>
 
-      <Footer snapshot={snapshot} />
+      <p className="text-xs text-muted-foreground">
+        Los abonos y tasas se guardan localmente en la app; la hoja sigue siendo la fuente
+        oficial.
+      </p>
+
+      <Footer snapshot={state.snapshot} />
     </div>
   );
 }

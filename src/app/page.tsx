@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
-import { getSnapshot } from "@/lib/sheets/snapshot";
+import { getFinancialState } from "@/lib/state";
 import {
   formatDop,
   formatUsd,
@@ -31,6 +31,7 @@ import {
   TrendingUp,
   Wallet,
   DollarSign,
+  Percent,
 } from "lucide-react";
 
 function DashboardSkeleton() {
@@ -41,7 +42,7 @@ function DashboardSkeleton() {
         <Skeleton className="h-4 w-64" />
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 7 }).map((_, i) => (
           <Card key={i}>
             <CardContent className="pt-5">
               <Skeleton className="mb-2 h-3 w-24" />
@@ -181,8 +182,15 @@ function cardUtilizationData(cards: CardAccount[], rate: number) {
 
 async function DashboardContent() {
   await io();
-  const snapshot = await getSnapshot();
+  const state = await getFinancialState();
+  const snapshot = state.snapshot;
   const rate = snapshot.settings.usdRate;
+
+  const monthlyCardInterest = state.cards.reduce(
+    (sum, card) => sum + (card.projection?.monthlyInterestDop ?? 0),
+    0,
+  );
+  const hasConfiguredCardRate = state.cards.some((card) => card.monthlyRate !== null);
 
   const totalCardDebtDop = snapshot.cardTotals.statementBalanceDop;
   const totalCardDebtUsd = snapshot.cardTotals.statementBalanceUsd;
@@ -364,6 +372,29 @@ async function DashboardContent() {
             </div>
           </CardContent>
         </Card>
+
+        {hasConfiguredCardRate && (
+          <Card>
+            <CardContent className="pt-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Interés mensual de tarjetas
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold tracking-tight">
+                    {formatDop(monthlyCardInterest)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Basado en tarjetas con tasa configurada
+                  </p>
+                </div>
+                <div className="rounded-lg bg-amber-500/10 p-2 text-amber-600">
+                  <Percent className="size-5" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

@@ -17,6 +17,19 @@ let cache: { snapshot: Snapshot; expiresAt: number } | null = null;
 let inflight: Promise<Snapshot> | null = null;
 
 /**
+ * Drops the cached snapshot.
+ *
+ * Phase 2 writes cells through the Sheets API; after a successful write the
+ * cached snapshot is known to be stale, so the write engine calls this instead
+ * of letting the UI wait out the 60s TTL. An in-flight build is abandoned (its
+ * result would predate the write); a later read starts a fresh fetch.
+ */
+export function invalidateSnapshotCache(): void {
+  cache = null;
+  inflight = null;
+}
+
+/**
  * Single entry point the UI uses to obtain the current snapshot.
  *
  * Reads every tab of the public "Payments" spreadsheet, validates the layout

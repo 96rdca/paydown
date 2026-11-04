@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
-import { getSnapshot } from "@/lib/sheets/snapshot";
+import { getFinancialState } from "@/lib/state";
+import { isSheetWriteConfigured } from "@/lib/gsheets/config";
 import {
   formatDateShort,
   formatDop,
@@ -8,10 +9,11 @@ import {
   relativeDayLabel,
 } from "@/lib/format";
 import { Footer } from "@/components/footer";
+import { DebtAmountEdit, DebtDateEdit } from "@/components/sheet-edit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Snapshot, LoanInstallment, CardAccount } from "@/lib/types";
+import type { Snapshot, LoanInstallment, CardAccount, DatedDebt } from "@/lib/types";
 import { CreditCard, Landmark, Wallet, DollarSign } from "lucide-react";
 
 interface CalendarEvent {
@@ -21,6 +23,8 @@ interface CalendarEvent {
   amount?: string;
   type: "salary" | "card-cut" | "card-due" | "loan" | "debt";
   meta?: string;
+  debtId?: string;
+  debt?: DatedDebt;
 }
 
 function buildCalendar(snapshot: Snapshot): CalendarEvent[] {
@@ -104,6 +108,8 @@ function buildCalendar(snapshot: Snapshot): CalendarEvent[] {
         title: debt.label,
         amount: formatDop(debt.amountDop),
         type: "debt",
+        debtId: debt.id,
+        debt,
       });
     }
   });
@@ -164,6 +170,50 @@ function countdownBadge(date: string) {
   );
 }
 
+function EventAmount({
+  event,
+  editable,
+}: {
+  event: CalendarEvent;
+  editable: boolean;
+}) {
+  if (event.type !== "debt" || !event.debt || !editable) {
+    return event.amount ? (
+      <span className="text-sm font-medium">{event.amount}</span>
+    ) : null;
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <DebtAmountEdit debtId={event.debt.id} amountDop={event.debt.amountDop} />
+    </span>
+  );
+}
+
+function EventDate({
+  event,
+  editable,
+}: {
+  event: CalendarEvent;
+  editable: boolean;
+}) {
+  if (event.type !== "debt" || !event.debt || !editable) {
+    return (
+      <span className="text-xs text-muted-foreground">
+        {formatDateShort(event.date)}
+        {event.meta ? ` · ${event.meta}` : ""}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <DebtDateEdit debtId={event.debt.id} dueDate={event.debt.dueDate} />
+      {event.meta ? ` · ${event.meta}` : ""}
+    </span>
+  );
+}
+
 function CalendarioSkeleton() {
   return (
     <div className="space-y-6">
@@ -189,8 +239,9 @@ function CalendarioSkeleton() {
 
 async function CalendarioContent() {
   await io();
-  const snapshot = await getSnapshot();
-  const events = buildCalendar(snapshot);
+  const state = await getFinancialState();
+  const editable = isSheetWriteConfigured();
+  const events = buildCalendar(state.snapshot);
   const grouped = groupByMonth(events);
 
   return (
@@ -229,18 +280,11 @@ async function CalendarioContent() {
                       </div>
                       <div>
                         <p className="text-sm font-medium">{event.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDateShort(event.date)}
-                          {event.meta ? ` · ${event.meta}` : ""}
-                        </p>
+                        <EventDate event={event} editable={editable} />
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      {event.amount && (
-                        <span className="text-sm font-medium">
-                          {event.amount}
-                        </span>
-                      )}
+                      <EventAmount event={event} editable={editable} />
                       {countdownBadge(event.date)}
                     </div>
                   </div>
@@ -251,7 +295,7 @@ async function CalendarioContent() {
         </div>
       )}
 
-      <Footer snapshot={snapshot} />
+      <Footer snapshot={state.snapshot} />
     </div>
   );
 }

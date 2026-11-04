@@ -1,8 +1,10 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
-import { getSnapshot } from "@/lib/sheets/snapshot";
+import { getFinancialState } from "@/lib/state";
+import { isSheetWriteConfigured } from "@/lib/gsheets/config";
 import { formatDop } from "@/lib/format";
 import { Footer } from "@/components/footer";
+import { SheetEditMoneyEndpoint } from "@/components/sheet-edit";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,7 +19,51 @@ import {
 } from "@/components/ui/table";
 import type { PayPeriod, BudgetItem } from "@/lib/types";
 
-function PeriodPanel({ period }: { period: PayPeriod }) {
+function EditableSalary({
+  period,
+  editable,
+}: {
+  period: PayPeriod;
+  editable: boolean;
+}) {
+  if (!editable) return <p className="text-xl font-semibold">{formatDop(period.salary)}</p>;
+  return (
+    <p className="text-xl font-semibold">
+      <SheetEditMoneyEndpoint
+        value={period.salary}
+        endpoint={`/api/sheet/periods/${encodeURIComponent(period.id)}/salary`}
+        before={period.salary}
+      />
+    </p>
+  );
+}
+
+function EditableItemAmount({
+  periodId,
+  item,
+  editable,
+}: {
+  periodId: string;
+  item: BudgetItem;
+  editable: boolean;
+}) {
+  if (!editable) return <span>{formatDop(item.amountDop)}</span>;
+  return (
+    <SheetEditMoneyEndpoint
+      value={item.amountDop}
+      endpoint={`/api/sheet/periods/${encodeURIComponent(periodId)}/items/${encodeURIComponent(item.id)}`}
+      before={item.amountDop}
+    />
+  );
+}
+
+function PeriodPanel({
+  period,
+  editable,
+}: {
+  period: PayPeriod;
+  editable: boolean;
+}) {
   const committed = period.salary - period.surplusDop;
   return (
     <div className="space-y-4">
@@ -25,7 +71,7 @@ function PeriodPanel({ period }: { period: PayPeriod }) {
         <Card>
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground">Sueldo</p>
-            <p className="text-xl font-semibold">{formatDop(period.salary)}</p>
+            <EditableSalary period={period} editable={editable} />
           </CardContent>
         </Card>
         <Card>
@@ -62,7 +108,7 @@ function PeriodPanel({ period }: { period: PayPeriod }) {
               <TableRow key={item.id}>
                 <TableCell className="font-medium">{item.label}</TableCell>
                 <TableCell className="text-right">
-                  {formatDop(item.amountDop)}
+                  <EditableItemAmount periodId={period.id} item={item} editable={editable} />
                 </TableCell>
                 <TableCell className="text-right">
                   {item.isUsdBilled && (
@@ -102,9 +148,10 @@ function QuincenasSkeleton() {
 
 async function QuincenasContent() {
   await io();
-  const snapshot = await getSnapshot();
-  const q15 = snapshot.periods.find((p: PayPeriod) => p.id === "Q15");
-  const q30 = snapshot.periods.find((p: PayPeriod) => p.id === "Q30");
+  const state = await getFinancialState();
+  const editable = isSheetWriteConfigured();
+  const q15 = state.snapshot.periods.find((p: PayPeriod) => p.id === "Q15");
+  const q30 = state.snapshot.periods.find((p: PayPeriod) => p.id === "Q30");
 
   return (
     <div className="space-y-6">
@@ -121,14 +168,14 @@ async function QuincenasContent() {
           <TabsTrigger value="Q30">Q 30</TabsTrigger>
         </TabsList>
         <TabsContent value="Q15" className="mt-4">
-          {q15 ? <PeriodPanel period={q15} /> : <p>Sin datos.</p>}
+          {q15 ? <PeriodPanel period={q15} editable={editable} /> : <p>Sin datos.</p>}
         </TabsContent>
         <TabsContent value="Q30" className="mt-4">
-          {q30 ? <PeriodPanel period={q30} /> : <p>Sin datos.</p>}
+          {q30 ? <PeriodPanel period={q30} editable={editable} /> : <p>Sin datos.</p>}
         </TabsContent>
       </Tabs>
 
-      <Footer snapshot={snapshot} />
+      <Footer snapshot={state.snapshot} />
     </div>
   );
 }

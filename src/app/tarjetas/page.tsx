@@ -1,10 +1,12 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
 import { getFinancialState } from "@/lib/state";
+import { isSheetWriteConfigured } from "@/lib/gsheets/config";
 import { formatDop, formatUsd, formatMonthlyRate } from "@/lib/format";
 import { MoneyInline } from "@/components/money";
 import { Footer } from "@/components/footer";
 import { CardRateDialog } from "@/components/card-rate-dialog";
+import { CardEditDialog } from "@/components/card-edit-dialog";
 import { CardInterestPanel } from "@/components/card-interest-panel";
 import { CardPayments } from "@/components/card-payments";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -28,7 +30,15 @@ function cardUtilization(card: AugmentedCard, rate: number): number | null {
   return Math.min(100, Math.round((balance / limit) * 100));
 }
 
-function CardItem({ card, rate }: { card: AugmentedCard; rate: number }) {
+function CardItem({
+  card,
+  rate,
+  editable,
+}: {
+  card: AugmentedCard;
+  rate: number;
+  editable: boolean;
+}) {
   const util = cardUtilization(card, rate);
   return (
     <Card className="transition-shadow hover:shadow-sm">
@@ -60,7 +70,10 @@ function CardItem({ card, rate }: { card: AugmentedCard; rate: number }) {
                 {util}%
               </Badge>
             )}
-            <CardRateDialog cardId={card.id} bank={card.bank} currentRate={card.monthlyRate} />
+            <div className="flex items-center gap-1">
+              {editable && <CardEditDialog card={card} />}
+              <CardRateDialog cardId={card.id} bank={card.bank} currentRate={card.monthlyRate} />
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -142,6 +155,7 @@ function TarjetasSkeleton() {
 async function TarjetasContent() {
   await io();
   const state = await getFinancialState();
+  const editable = isSheetWriteConfigured();
   const rate = state.snapshot.settings.usdRate;
   const totals: CardTotals = state.snapshot.cardTotals;
 
@@ -197,7 +211,7 @@ async function TarjetasContent() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {state.cards.map((card: AugmentedCard) => (
-          <CardItem key={card.id} card={card} rate={rate} />
+          <CardItem key={card.id} card={card} rate={rate} editable={editable} />
         ))}
       </div>
 

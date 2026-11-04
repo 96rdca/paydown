@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
 import { getFinancialState } from "@/lib/state";
+import { isSheetWriteConfigured } from "@/lib/gsheets/config";
 import { formatDop, formatDate, formatAnnualRate, formatInteger } from "@/lib/format";
 import { Footer } from "@/components/footer";
 import { LoanAbonoSimulator } from "@/components/loan-abono-simulator";
@@ -167,6 +168,7 @@ function PrestamosSkeleton() {
 async function PrestamosContent() {
   await io();
   const state = await getFinancialState();
+  const editable = isSheetWriteConfigured();
   const rate = state.snapshot.settings.usdRate;
 
   return (
@@ -188,7 +190,7 @@ async function PrestamosContent() {
                 <LoanAbonosList loan={loan} />
               </>
             )}
-            <LoanScheduleTabs loan={loan} />
+            <LoanScheduleTabs loan={loan} editable={editable} />
             <Separator />
           </div>
         ))}

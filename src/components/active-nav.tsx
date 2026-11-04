@@ -38,16 +38,30 @@ const navItems = [
   { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
+function useMounted() {
+  return React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+}
+
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const mounted = useMounted();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" aria-label="Cambiar tema">
-          {theme === "dark" ? (
-            <Moon className="size-4" />
-          ) : theme === "light" ? (
-            <Sun className="size-4" />
+          {mounted ? (
+            theme === "dark" ? (
+              <Moon className="size-4" />
+            ) : theme === "light" ? (
+              <Sun className="size-4" />
+            ) : (
+              <Monitor className="size-4" />
+            )
           ) : (
             <Monitor className="size-4" />
           )}

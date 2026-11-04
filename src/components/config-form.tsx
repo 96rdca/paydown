@@ -5,14 +5,20 @@ import { useRouter } from "next/navigation";
 import { formatDop, formatDateTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, Database, DollarSign } from "lucide-react";
+import { SheetEditNumber, parseEditResponse } from "@/components/sheet-edit";
+import { RefreshCw, Database, DollarSign, FileSpreadsheet } from "lucide-react";
 
 interface SnapshotInfo {
   fetchedAt: string;
   usdRate: number;
 }
 
-export function ConfigForm({ initial }: { initial: SnapshotInfo }) {
+interface ConfigFormProps {
+  editable: boolean;
+  initial: SnapshotInfo;
+}
+
+export function ConfigForm({ editable, initial }: ConfigFormProps) {
   const router = useRouter();
   const [info, setInfo] = React.useState<SnapshotInfo>(initial);
   const [loading, setLoading] = React.useState(false);
@@ -42,6 +48,13 @@ export function ConfigForm({ initial }: { initial: SnapshotInfo }) {
         </p>
       </div>
 
+      {editable && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary">
+          <FileSpreadsheet className="size-4" />
+          Se escriben cambios en tu hoja de Google.
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-6">
           <div className="rounded-xl border bg-card p-5 shadow-sm">
@@ -53,15 +66,32 @@ export function ConfigForm({ initial }: { initial: SnapshotInfo }) {
             </p>
             <div className="flex items-center gap-4">
               <div className="flex-1">
-                <Input
-                  value={formatDop(info.usdRate)}
-                  readOnly
-                  className="bg-muted"
-                />
+                {editable ? (
+                  <SheetEditNumber
+                    value={info.usdRate}
+                    decimals={2}
+                    suffix="DOP por US$1"
+                    save={async (after) => {
+                      const res = await fetch("/api/sheet/settings/usd-rate", {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ before: info.usdRate, after }),
+                      });
+                      const result = await parseEditResponse(res);
+                      if (result.ok) {
+                        setInfo((prev) => ({ ...prev, usdRate: after }));
+                      }
+                      return result;
+                    }}
+                  />
+                ) : (
+                  <Input
+                    value={formatDop(info.usdRate)}
+                    readOnly
+                    className="bg-muted"
+                  />
+                )}
               </div>
-              <span className="text-sm text-muted-foreground">
-                DOP por US$1
-              </span>
             </div>
           </div>
         </div>

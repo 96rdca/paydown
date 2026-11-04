@@ -8,6 +8,9 @@ graphify-out/
 # app-owned local data (rates, payment log, abonos)
 /data/
 
+# Google service account key (Phase 2 write-back) — never commit
+.google-service-account.json
+
 # dependencies
 /node_modules
 /.pnp

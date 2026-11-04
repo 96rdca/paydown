@@ -1,0 +1,486 @@
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { parseMoneyInput, formatDop, formatUsd, formatNumber, formatDate } from "@/lib/format";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Pencil, Loader2, Check, RotateCcw, AlertCircle } from "lucide-react";
+import { cn } from "cn";
+
+export type SheetEditResult =
+  | { ok: true }
+  | { ok: false; error: string; current?: number | string; status?: number };
+
+export async function parseEditResponse(res: Response): Promise<SheetEditResult> {
+  if (res.ok) return { ok: true };
+  const data = (await res.json().catch(() => ({ error: "Error desconocido" }))) as {
+    error?: string;
+    current?: number | string;
+  };
+  return {
+    ok: false,
+    error: data.error ?? "Error desconocido",
+    current: data.current,
+    status: res.status,
+  };
+}
+
+function formatConflictMessage(error: string, current?: number | string): string {
+  if (current !== undefined) {
+    return `La hoja cambió — valor actual: ${current}`;
+  }
+  return error;
+}
+
+interface UseSheetEditOptions<T> {
+  value: T;
+  format: (value: T) => string;
+  parse: (raw: string) => T | null;
+  save: (after: T) => Promise<SheetEditResult>;
+}
+
+function useSheetEdit<T>({ value, format, parse, save }: UseSheetEditOptions<T>) {
+  const router = useRouter();
+  const [editing, setEditing] = React.useState(false);
+  const [raw, setRaw] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<{ message: string; current?: number | string } | null>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  function start() {
+    setRaw(format(value));
+    setError(null);
+    setEditing(true);
+  }
+
+  function cancel() {
+    setEditing(false);
+    setError(null);
+  }
+
+  async function commit() {
+    const parsed = parse(raw);
+    if (parsed === null) {
+      setError({ message: "Valor inválido" });
+      return;
+    }
+    if (parsed === value) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await save(parsed);
+      if (result.ok) {
+        setEditing(false);
+        router.refresh();
+      } else {
+        setError({ message: result.error, current: result.current });
+        if (result.status === 409) {
+          window.setTimeout(() => router.refresh(), 1500);
+        }
+      }
+    } catch {
+      setError({ message: "No se pudo guardar. Intenta de nuevo." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void commit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancel();
+    }
+  }
+
+  return {
+    editing,
+    raw,
+    setRaw,
+    saving,
+    error,
+    inputRef,
+    start,
+    cancel,
+    handleKeyDown,
+  };
+}
+
+interface SheetEditMoneyProps {
+  value: number;
+  currency?: "dop" | "usd";
+  save: (after: number) => Promise<SheetEditResult>;
+  className?: string;
+}
+
+export function SheetEditMoney({ value, currency = "dop", save, className }: SheetEditMoneyProps) {
+  const formatter = currency === "usd" ? formatUsd : formatDop;
+  const { editing, raw, setRaw, saving, error, inputRef, start, cancel, handleKeyDown } =
+    useSheetEdit<number>({
+      value,
+      format: formatNumber,
+      parse: parseMoneyInput,
+      save,
+    });
+
+  if (editing) {
+    return (
+      <span className={cn("inline-flex items-center gap-1", className)}>
+        <Input
+          ref={inputRef}
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={cancel}
+          inputMode="decimal"
+          disabled={saving}
+          className="h-6 w-28 px-1.5 py-0 text-sm"
+        />
+        {saving && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
+        {error && (
+          <span className="inline-flex items-center gap-1 text-xs text-destructive">
+            <AlertCircle className="size-3" />
+            {formatConflictMessage(error.message, error.current)}
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <span className={cn("group inline-flex items-center gap-1", className)}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        onClick={start}
+        className="h-auto gap-1 px-1 py-0 font-normal tabular-nums hover:underline"
+      >
+        {formatter(value)}
+        <Pencil className="size-3 opacity-0 transition-opacity group-hover:opacity-70" />
+      </Button>
+    </span>
+  );
+}
+
+interface SheetEditNumberProps {
+  value: number;
+  decimals?: number;
+  suffix?: string;
+  save: (after: number) => Promise<SheetEditResult>;
+  className?: string;
+}
+
+export function SheetEditNumber({ value, decimals = 2, suffix, save, className }: SheetEditNumberProps) {
+  const { editing, raw, setRaw, saving, error, inputRef, start, cancel, handleKeyDown } =
+    useSheetEdit<number>({
+      value,
+      format: (v) => v.toFixed(decimals),
+      parse: parseMoneyInput,
+      save,
+    });
+
+  if (editing) {
+    return (
+      <span className={cn("inline-flex items-center gap-1", className)}>
+        <Input
+          ref={inputRef}
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={cancel}
+          inputMode="decimal"
+          disabled={saving}
+          className="h-6 w-24 px-1.5 py-0 text-sm"
+        />
+        {suffix && <span className="text-xs text-muted-foreground">{suffix}</span>}
+        {saving && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
+        {error && (
+          <span className="inline-flex items-center gap-1 text-xs text-destructive">
+            <AlertCircle className="size-3" />
+            {formatConflictMessage(error.message, error.current)}
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <span className={cn("group inline-flex items-center gap-1", className)}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        onClick={start}
+        className="h-auto gap-1 px-1 py-0 font-normal tabular-nums hover:underline"
+      >
+        {formatNumber(value)}
+        <Pencil className="size-3 opacity-0 transition-opacity group-hover:opacity-70" />
+      </Button>
+      {suffix && <span className="text-xs text-muted-foreground">{suffix}</span>}
+    </span>
+  );
+}
+
+interface SheetEditDateProps {
+  value: string;
+  save: (after: string) => Promise<SheetEditResult>;
+  className?: string;
+}
+
+export interface SheetEditMoneyEndpointProps {
+  value: number;
+  currency?: "dop" | "usd";
+  endpoint: string;
+  before: number;
+  className?: string;
+}
+
+export function SheetEditMoneyEndpoint({
+  value,
+  currency = "dop",
+  endpoint,
+  before,
+  className,
+}: SheetEditMoneyEndpointProps) {
+  return (
+    <SheetEditMoney
+      value={value}
+      currency={currency}
+      save={async (after) => {
+        const res = await fetch(endpoint, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ before, after }),
+        });
+        return parseEditResponse(res);
+      }}
+      className={className}
+    />
+  );
+}
+
+export interface SheetEditDateEndpointProps {
+  value: string;
+  endpoint: string;
+  before: string;
+  className?: string;
+}
+
+export function SheetEditDateEndpoint({
+  value,
+  endpoint,
+  before,
+  className,
+}: SheetEditDateEndpointProps) {
+  return (
+    <SheetEditDate
+      value={value}
+      save={async (after) => {
+        const res = await fetch(endpoint, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ before, after }),
+        });
+        return parseEditResponse(res);
+      }}
+      className={className}
+    />
+  );
+}
+
+export interface DebtAmountEditProps {
+  debtId: string;
+  amountDop: number;
+}
+
+export function DebtAmountEdit({ debtId, amountDop }: DebtAmountEditProps) {
+  return (
+    <SheetEditMoney
+      value={amountDop}
+      save={async (after) => {
+        const res = await fetch(`/api/sheet/debts/${encodeURIComponent(debtId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amountDop: { before: amountDop, after } }),
+        });
+        return parseEditResponse(res);
+      }}
+    />
+  );
+}
+
+export interface DebtDateEditProps {
+  debtId: string;
+  dueDate: string;
+}
+
+export function DebtDateEdit({ debtId, dueDate }: DebtDateEditProps) {
+  return (
+    <SheetEditDate
+      value={dueDate}
+      save={async (after) => {
+        const res = await fetch(`/api/sheet/debts/${encodeURIComponent(debtId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dueDate: { before: dueDate, after } }),
+        });
+        return parseEditResponse(res);
+      }}
+    />
+  );
+}
+
+function parseIsoDate(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  const d = new Date(trimmed);
+  if (Number.isNaN(d.getTime())) return null;
+  return trimmed;
+}
+
+export function SheetEditDate({ value, save, className }: SheetEditDateProps) {
+  const { editing, raw, setRaw, saving, error, inputRef, start, cancel, handleKeyDown } =
+    useSheetEdit<string>({
+      value,
+      format: (v) => v,
+      parse: parseIsoDate,
+      save,
+    });
+
+  if (editing) {
+    return (
+      <span className={cn("inline-flex items-center gap-1", className)}>
+        <Input
+          ref={inputRef}
+          type="date"
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={cancel}
+          disabled={saving}
+          className="h-6 w-auto px-1.5 py-0 text-sm"
+        />
+        {saving && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
+        {error && (
+          <span className="inline-flex items-center gap-1 text-xs text-destructive">
+            <AlertCircle className="size-3" />
+            {formatConflictMessage(error.message, error.current)}
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <span className={cn("group inline-flex items-center gap-1", className)}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        onClick={start}
+        className="h-auto gap-1 px-1 py-0 font-normal hover:underline"
+      >
+        {formatDate(value)}
+        <Pencil className="size-3 opacity-0 transition-opacity group-hover:opacity-70" />
+      </Button>
+    </span>
+  );
+}
+
+interface CuotaStatusButtonProps {
+  loanId: string;
+  number: number;
+  status: "paid" | "pending" | "extra";
+  save: (before: string, after: string) => Promise<SheetEditResult>;
+}
+
+function statusLabel(status: CuotaStatusButtonProps["status"]): string {
+  switch (status) {
+    case "paid":
+      return "Cuota Paga";
+    case "pending":
+      return "Pendiente";
+    case "extra":
+      return "Abono";
+  }
+}
+
+export function CuotaStatusButton({ status, save }: CuotaStatusButtonProps) {
+  const router = useRouter();
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  if (status === "extra") {
+    return null;
+  }
+
+  async function toggle() {
+    const before = statusLabel(status);
+    const after = status === "paid" ? "Pendiente" : "Cuota Paga";
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await save(before, after);
+      if (result.ok) {
+        router.refresh();
+      } else {
+        setError(result.error);
+        if (result.status === 409) {
+          window.setTimeout(() => router.refresh(), 1500);
+        }
+      }
+    } catch {
+      setError("No se pudo guardar. Intenta de nuevo.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const isPaid = status === "paid";
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Button
+        type="button"
+        variant={isPaid ? "outline" : "secondary"}
+        size="icon-xs"
+        onClick={() => void toggle()}
+        disabled={saving}
+        title={isPaid ? "Marcar como pendiente" : "Marcar como pagada"}
+        className={cn(
+          isPaid
+            ? "text-amber-600 hover:bg-amber-500/10 hover:text-amber-700"
+            : "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:text-emerald-700",
+        )}
+      >
+        {saving ? (
+          <Loader2 className="size-3 animate-spin" />
+        ) : isPaid ? (
+          <RotateCcw className="size-3" />
+        ) : (
+          <Check className="size-3" />
+        )}
+      </Button>
+      {error && (
+        <span className="inline-flex items-center gap-1 text-xs text-destructive">
+          <AlertCircle className="size-3" />
+          {error}
+        </span>
+      )}
+    </span>
+  );
+}

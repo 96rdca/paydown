@@ -11,11 +11,13 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { CuotaStatusButton, parseEditResponse } from "@/components/sheet-edit";
 import type { AugmentedLoan, LoanInstallment } from "@/lib/types";
 import { FileSpreadsheet, Sparkles } from "lucide-react";
 
 interface LoanScheduleTabsProps {
   loan: AugmentedLoan;
+  editable?: boolean;
 }
 
 function statusBadge(status: LoanInstallment["status"]) {
@@ -37,7 +39,15 @@ function statusBadge(status: LoanInstallment["status"]) {
   }
 }
 
-function ScheduleTable({ rows }: { rows: LoanInstallment[] }) {
+function ScheduleTable({
+  rows,
+  loanId,
+  editable,
+}: {
+  rows: LoanInstallment[];
+  loanId?: string;
+  editable?: boolean;
+}) {
   return (
     <div className="rounded-xl border">
       <Table>
@@ -52,6 +62,7 @@ function ScheduleTable({ rows }: { rows: LoanInstallment[] }) {
             <TableHead className="text-right">Saldo final</TableHead>
             <TableHead className="text-right">Abonado</TableHead>
             <TableHead>Estado</TableHead>
+            {editable && <TableHead className="w-10" />}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -73,6 +84,26 @@ function ScheduleTable({ rows }: { rows: LoanInstallment[] }) {
                 {inst.extraPayment ? formatDop(inst.extraPayment) : "—"}
               </TableCell>
               <TableCell>{statusBadge(inst.status)}</TableCell>
+              {editable && loanId && (
+                <TableCell>
+                  <CuotaStatusButton
+                    loanId={loanId}
+                    number={inst.number}
+                    status={inst.status}
+                    save={async (before, after) => {
+                      const res = await fetch(
+                        `/api/sheet/loans/${encodeURIComponent(loanId)}/cuotas/${encodeURIComponent(inst.number)}/status`,
+                        {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ before, after }),
+                        },
+                      );
+                      return parseEditResponse(res);
+                    }}
+                  />
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>
@@ -81,14 +112,14 @@ function ScheduleTable({ rows }: { rows: LoanInstallment[] }) {
   );
 }
 
-export function LoanScheduleTabs({ loan }: LoanScheduleTabsProps) {
+export function LoanScheduleTabs({ loan, editable }: LoanScheduleTabsProps) {
   const hasProjection =
     loan.projection && loan.projection.projectedSchedule.length > 0;
   const hasAbonos = loan.abonos.length > 0;
 
   if (!hasProjection || !hasAbonos) {
     return loan.schedule.length > 0 ? (
-      <ScheduleTable rows={loan.schedule} />
+      <ScheduleTable rows={loan.schedule} loanId={loan.id} editable={editable} />
     ) : (
       <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
         {loan.name} no tiene cronograma detallado.
@@ -107,7 +138,7 @@ export function LoanScheduleTabs({ loan }: LoanScheduleTabsProps) {
         </TabsTrigger>
       </TabsList>
       <TabsContent value="sheet">
-        <ScheduleTable rows={loan.schedule} />
+        <ScheduleTable rows={loan.schedule} loanId={loan.id} editable={editable} />
       </TabsContent>
       <TabsContent value="projected">
         {loan.projection ? (

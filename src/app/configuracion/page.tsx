@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
 import { getFinancialState } from "@/lib/state";
+import { isSheetWriteConfigured } from "@/lib/gsheets/config";
 import { Footer } from "@/components/footer";
 import { ConfigForm } from "@/components/config-form";
 import { LocalDataCard } from "@/components/local-data-card";
@@ -38,10 +39,13 @@ function ConfiguracionSkeleton() {
 async function ConfiguracionContent() {
   await io();
   const state = await getFinancialState();
+  const editable = isSheetWriteConfigured();
 
   return (
     <div className="space-y-8">
       <ConfigForm
+        key={state.snapshot.fetchedAt}
+        editable={editable}
         initial={{
           fetchedAt: state.snapshot.fetchedAt,
           usdRate: state.snapshot.settings.usdRate,

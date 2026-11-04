@@ -193,6 +193,13 @@ export interface Snapshot {
 export interface CardOverlayConfig {
   /** Monthly interest rate as a fraction (e.g. 0.0255 = 2.55 %/mes). */
   monthlyRate: number | null;
+  /**
+   * True when the card has a SINGLE credit pool shared across DOP and USD —
+   * the USD balance consumes the DOP limit converted at the tasa (only APAP
+   * works this way today). Default/omitted false = separate DOP and USD
+   * pools, each with its own limit and utilization.
+   */
+  sharedLimitDopUsd?: boolean;
 }
 
 export interface CardPayment {
@@ -251,6 +258,22 @@ export interface ProjectionTotals {
   endDate: string;
 }
 
+/**
+ * Mode-aware credit utilization. Separate-pool cards report DOP and USD
+ * utilization independently; shared-pool cards (APAP) report one combined
+ * figure where the USD balance is converted at the tasa against the DOP
+ * limit.
+ */
+export interface CardUtilization {
+  kind: "separate" | "shared" | "none";
+  /** Shared mode: (balanceDop + balanceUsd × tasa) / limitDop. */
+  combined: number | null;
+  /** Separate mode: balanceDop / limitDop (null when either is missing). */
+  dop: number | null;
+  /** Separate mode: balanceUsd / limitUsd (null when either is missing). */
+  usd: number | null;
+}
+
 export interface LoanProjection {
   /** Remaining cost if nothing extra is ever paid (from current state). */
   baseline: ProjectionTotals;
@@ -266,6 +289,8 @@ export interface AugmentedCard extends CardAccount {
   payments: CardPayment[];
   /** Null until a monthly rate is configured in the overlay. */
   projection: CardProjection | null;
+  /** Resolved from the overlay (default false): one shared DOP/USD pool vs separate pools. */
+  sharedLimitDopUsd: boolean;
 }
 
 export interface AugmentedLoan extends Loan {

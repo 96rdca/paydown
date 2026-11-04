@@ -59,6 +59,16 @@ export class OverlayNotFoundError extends Error {
   }
 }
 
+/**
+ * Partial update for a card's app-owned configuration. Only the keys present
+ * are applied; `monthlyRate: null` clears the rate. `sharedLimitDopUsd`
+ * defaults to false (separate DOP/USD pools) when never set.
+ */
+export interface CardConfigPatch {
+  monthlyRate?: number | null;
+  sharedLimitDopUsd?: boolean;
+}
+
 export interface NewCardPayment {
   cardId: string;
   date: string;
@@ -77,6 +87,12 @@ export interface NewLoanAbono {
 export interface OverlayStore {
   readonly filePath: string;
   read(): Promise<Overlay>;
+  /** Apply a partial config patch; at least one key is required. */
+  setCardConfig(
+    cardId: string,
+    patch: CardConfigPatch,
+  ): Promise<CardOverlayConfig>;
+  /** @deprecated Thin wrapper over `setCardConfig`; keeps old call sites working. */
   setCardRate(
     cardId: string,
     monthlyRate: number | null,
@@ -199,6 +215,13 @@ function requireRate(value: unknown): number | null {
   return value;
 }
 
+function requireSharedLimit(value: unknown): boolean {
+  if (typeof value !== "boolean") {
+    throw new OverlayValidationError('"sharedLimitDopUsd" must be a boolean.');
+  }
+  return value;
+}
+
 /* ── file parsing ──────────────────────────────────────────────────────── */
 
 function emptyOverlay(): Overlay {
@@ -254,7 +277,20 @@ function validateCards(
       );
     }
 
-    cards[cardId] = { monthlyRate: rate as number | null };
+    // Read compatibility: files written before shared pools existed only have
+    // `monthlyRate`. The flag is optional on disk and defaults to false.
+    const shared = entry.sharedLimitDopUsd;
+    if (shared !== undefined && typeof shared !== "boolean") {
+      throw corrupt(
+        filePath,
+        `cards["${cardId}"].sharedLimitDopUsd must be a boolean when present`,
+      );
+    }
+
+    cards[cardId] = {
+      monthlyRate: rate as number | null,
+      sharedLimitDopUsd: shared ?? false,
+    };
   }
   return cards;
 }
@@ -552,18 +588,58 @@ export function createOverlayStore(
     });
   }
 
+  async function setCardConfig(
+    cardId: string,
+    patch: CardConfigPatch,
+  ): Promise<CardOverlayConfig> {
+    const id = requireId(cardId, "cardId");
+
+    if (patch === null || typeof patch !== "object" || Array.isArray(patch)) {
+      throw new OverlayValidationError(
+        "Card config must be an object with at least one key.",
+      );
+    }
+
+    const hasRate = Object.prototype.hasOwnProperty.call(patch, "monthlyRate");
+    const hasShared = Object.prototype.hasOwnProperty.call(
+      patch,
+      "sharedLimitDopUsd",
+    );
+
+    if (!hasRate && !hasShared) {
+      throw new OverlayValidationError(
+        'At least one of "monthlyRate" or "sharedLimitDopUsd" must be provided.',
+      );
+    }
+
+    const rate = hasRate ? requireRate(patch.monthlyRate) : undefined;
+    const shared = hasShared
+      ? requireSharedLimit(patch.sharedLimitDopUsd)
+      : undefined;
+
+    return mutate((draft) => {
+      // Re-read the file's entry (never assume the cached copy) so a partial
+      // patch cannot drop the keys it does not mention.
+      const current = draft.cards[id];
+      const config: CardOverlayConfig = {
+        monthlyRate: hasRate
+          ? (rate as number | null)
+          : (current?.monthlyRate ?? null),
+        sharedLimitDopUsd: hasShared
+          ? (shared as boolean)
+          : (current?.sharedLimitDopUsd ?? false),
+      };
+      draft.cards[id] = config;
+      return config;
+    });
+  }
+
+  /** Backwards-compatible wrapper: patches only the monthly rate. */
   async function setCardRate(
     cardId: string,
     monthlyRate: number | null,
   ): Promise<CardOverlayConfig> {
-    const id = requireId(cardId, "cardId");
-    const rate = requireRate(monthlyRate);
-
-    return mutate((draft) => {
-      const config: CardOverlayConfig = { monthlyRate: rate };
-      draft.cards[id] = config;
-      return config;
-    });
+    return setCardConfig(cardId, { monthlyRate });
   }
 
   async function addCardPayment(input: NewCardPayment): Promise<CardPayment> {
@@ -646,6 +722,7 @@ export function createOverlayStore(
   return {
     filePath,
     read,
+    setCardConfig,
     setCardRate,
     addCardPayment,
     deleteCardPayment,

@@ -23,6 +23,7 @@
 import type {
   CardAccount,
   CardProjection,
+  CardUtilization,
   Loan,
   LoanAbono,
   LoanInstallment,
@@ -155,6 +156,83 @@ export function projectCard(
     endDate: addMonthsClamped(today, months),
   };
   return projection;
+}
+
+/* ── credit utilization ────────────────────────────────────────────────── */
+
+/**
+ * Structural input for {@link cardUtilization}: any card-shaped object with
+ * the pool limits, statement balances and the resolved shared-pool flag.
+ */
+export interface CardUtilizationInput {
+  statementBalanceDop: number | null;
+  statementBalanceUsd: number | null;
+  limitDop: number | null;
+  limitUsd: number | null;
+  /** Resolved from the overlay; true only for single-pool cards (APAP). */
+  sharedLimitDopUsd: boolean;
+}
+
+function utilizationRatio(
+  balance: number | null,
+  limit: number | null,
+): number | null {
+  if (balance === null || limit === null || limit <= 0) {
+    return null;
+  }
+  return balance / limit;
+}
+
+/**
+ * Credit utilization per the card's pool model.
+ *
+ * - Shared pool (`sharedLimitDopUsd === true`, e.g. APAP): a single pool where
+ *   the USD balance consumes the DOP limit converted at the tasa. `combined`
+ *   is `(balanceDop + balanceUsd × usdRate) / limitDop`; null when the DOP
+ *   limit is missing/0 or both balances are unknown. `dop`/`usd` are null.
+ * - Separate pools (default): `dop = balanceDop / limitDop` and
+ *   `usd = balanceUsd / limitUsd`, each computed independently.
+ * - Missing data is treated as UNKNOWN, never as zero usage: a missing balance
+ *   yields null for that pool (a missing limit also yields null). A configured
+ *   limit with no reported balance is therefore not "0% used".
+ * - `kind` mirrors the card's configured mode; it is "none" only for a
+ *   separate-pool card with no usable limit at all (both limits missing/0).
+ *
+ * Values are fractions (0.44 = 44% used) and are not rounded or clamped; the
+ * UI formats them. `projectCard` stays currency-combined: interest accrues on
+ * the total owed regardless of how the limits are split.
+ */
+export function cardUtilization(
+  card: CardUtilizationInput,
+  usdRate: number,
+): CardUtilization {
+  if (card.sharedLimitDopUsd) {
+    const limitDop = card.limitDop;
+    const balanceDop = card.statementBalanceDop;
+    const balanceUsd = card.statementBalanceUsd;
+
+    const combined =
+      limitDop === null ||
+      limitDop <= 0 ||
+      (balanceDop === null && balanceUsd === null)
+        ? null
+        : ((balanceDop ?? 0) + (balanceUsd ?? 0) * usdRate) / limitDop;
+
+    return { kind: "shared", combined, dop: null, usd: null };
+  }
+
+  const dop = utilizationRatio(card.statementBalanceDop, card.limitDop);
+  const usd = utilizationRatio(card.statementBalanceUsd, card.limitUsd);
+  const hasUsableLimit =
+    (card.limitDop !== null && card.limitDop > 0) ||
+    (card.limitUsd !== null && card.limitUsd > 0);
+
+  return {
+    kind: hasUsableLimit ? "separate" : "none",
+    combined: null,
+    dop,
+    usd,
+  };
 }
 
 /* ── loans ─────────────────────────────────────────────────────────────── */

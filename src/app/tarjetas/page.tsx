@@ -14,20 +14,126 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { AugmentedCard, CardTotals } from "@/lib/types";
+import { cardUtilization } from "@/lib/projection";
+import type { AugmentedCard, CardTotals, CardUtilization } from "@/lib/types";
 import { CreditCard } from "lucide-react";
 
-function cardUtilization(card: AugmentedCard, rate: number): number | null {
-  const limitDop = card.limitDop ?? 0;
-  const limitUsdDop = (card.limitUsd ?? 0) * rate;
-  const balanceDop = card.statementBalanceDop ?? 0;
-  const balanceUsdDop = (card.statementBalanceUsd ?? 0) * rate;
-  const limit = limitDop + limitUsdDop;
-  const balance = balanceDop + balanceUsdDop;
-  if (limit === 0 || (card.limitDop === null && card.limitUsd === null)) {
-    return null;
+/**
+ * The utilization badge reflects the worst pool: for separate-pool cards the
+ * highest of the DOP / USD utilizations, for shared-pool cards the combined
+ * value. This is what matters to a bank when judging credit exposure.
+ */
+function worstUtilization(util: CardUtilization): number | null {
+  if (util.kind === "none") return null;
+  if (util.kind === "shared") return util.combined;
+  const worst = Math.max(util.dop ?? 0, util.usd ?? 0);
+  return worst > 0 ? worst : null;
+}
+
+function utilizationBadgePercent(util: CardUtilization): number | null {
+  const raw = worstUtilization(util);
+  if (raw === null) return null;
+  return Math.min(100, Math.round(raw * 100));
+}
+
+function PoolGaugeRow({
+  label,
+  util,
+  balance,
+  limit,
+  currency,
+}: {
+  label: string;
+  util: number | null;
+  balance: number | null;
+  limit: number | null;
+  currency: "dop" | "usd";
+}) {
+  if (util === null) {
+    return (
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="text-muted-foreground">—</span>
+      </div>
+    );
   }
-  return Math.min(100, Math.round((balance / limit) * 100));
+
+  const pct = Math.min(100, Math.round(util * 100));
+  const formatMoney = currency === "dop" ? formatDop : formatUsd;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-sm">
+        <span className="font-medium">{label}</span>
+        <span className="tabular-nums">{pct}%</span>
+      </div>
+      <Progress value={pct} className="h-1.5" />
+      <p className="text-xs text-muted-foreground">
+        {formatMoney(balance)} / {formatMoney(limit)}
+      </p>
+    </div>
+  );
+}
+
+function UtilizationGauges({
+  card,
+  util,
+  rate,
+}: {
+  card: AugmentedCard;
+  util: CardUtilization;
+  rate: number;
+}) {
+  if (util.kind === "none") {
+    return (
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Utilización</p>
+        <p className="text-xs text-muted-foreground">—</p>
+      </div>
+    );
+  }
+
+  if (util.kind === "shared") {
+    const pct =
+      util.combined !== null ? Math.min(100, Math.round(util.combined * 100)) : null;
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium">Combinado (RD$ + US$)</span>
+          <span className="tabular-nums">{pct !== null ? `${pct}%` : "—"}</span>
+        </div>
+        <Progress value={pct ?? 0} className="h-1.5" />
+        <p className="text-xs text-muted-foreground">
+          Límite compartido: {formatDop(card.limitDop)}
+          {card.statementBalanceUsd !== null && card.statementBalanceUsd !== 0 && (
+            <>
+              {" "}· {formatUsd(card.statementBalanceUsd)} ={" "}
+              {formatDop(card.statementBalanceUsd * rate)}
+            </>
+          )}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">Utilización</p>
+      <PoolGaugeRow
+        label="DOP"
+        util={util.dop}
+        balance={card.statementBalanceDop}
+        limit={card.limitDop}
+        currency="dop"
+      />
+      <PoolGaugeRow
+        label="USD"
+        util={util.usd}
+        balance={card.statementBalanceUsd}
+        limit={card.limitUsd}
+        currency="usd"
+      />
+    </div>
+  );
 }
 
 function CardItem({
@@ -40,6 +146,7 @@ function CardItem({
   editable: boolean;
 }) {
   const util = cardUtilization(card, rate);
+  const badgePct = utilizationBadgePercent(util);
   return (
     <Card className="transition-shadow hover:shadow-sm">
       <CardHeader className="pb-2">
@@ -56,23 +163,33 @@ function CardItem({
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
-            {util !== null && (
+            {badgePct !== null && (
               <Badge
                 variant="secondary"
                 className={
-                  util >= 80
+                  badgePct >= 80
                     ? "bg-red-500/10 text-red-600"
-                    : util >= 50
+                    : badgePct >= 50
                       ? "bg-amber-500/10 text-amber-600"
                       : "bg-emerald-500/10 text-emerald-600"
                 }
               >
-                {util}%
+                {badgePct}%
+              </Badge>
+            )}
+            {card.sharedLimitDopUsd && (
+              <Badge variant="outline" className="text-[10px] font-normal">
+                Límite compartido
               </Badge>
             )}
             <div className="flex items-center gap-1">
               {editable && <CardEditDialog card={card} />}
-              <CardRateDialog cardId={card.id} bank={card.bank} currentRate={card.monthlyRate} />
+              <CardRateDialog
+                cardId={card.id}
+                bank={card.bank}
+                currentRate={card.monthlyRate}
+                sharedLimitDopUsd={card.sharedLimitDopUsd}
+              />
             </div>
           </div>
         </div>
@@ -100,7 +217,9 @@ function CardItem({
             />
           </div>
         </div>
-        {util !== null ? <Progress value={util} className="h-1.5" /> : null}
+
+        <UtilizationGauges card={card} util={util} rate={rate} />
+
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             Pago mínimo: {formatDop(card.minPaymentDop)} / {formatUsd(card.minPaymentUsd)}

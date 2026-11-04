@@ -21,6 +21,7 @@ interface CardRateDialogProps {
   cardId: string;
   bank: string;
   currentRate: number | null;
+  sharedLimitDopUsd?: boolean;
 }
 
 function parsePercentInput(value: string): number | null {
@@ -40,17 +41,21 @@ export function CardRateDialog({
   cardId,
   bank,
   currentRate,
+  sharedLimitDopUsd = false,
 }: CardRateDialogProps) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [raw, setRaw] = React.useState(formatPercentInput(currentRate));
+  const [shared, setShared] = React.useState(sharedLimitDopUsd);
   const [saving, setSaving] = React.useState(false);
+  const [toggling, setToggling] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
     if (nextOpen) {
       setRaw(formatPercentInput(currentRate));
+      setShared(sharedLimitDopUsd);
       setError(null);
     }
   }
@@ -90,6 +95,30 @@ export function CardRateDialog({
     setRaw("");
   }
 
+  async function toggleShared(next: boolean) {
+    if (next === sharedLimitDopUsd) return;
+    setToggling(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/overlay/cards/${encodeURIComponent(cardId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sharedLimitDopUsd: next }),
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        throw new Error(data.error ?? "No se pudo cambiar el modelo de límite.");
+      }
+      setShared(next);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido.");
+      setShared(sharedLimitDopUsd);
+    } finally {
+      setToggling(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
@@ -106,12 +135,12 @@ export function CardRateDialog({
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Configurar tasa mensual</DialogTitle>
+          <DialogTitle>Configurar tarjeta</DialogTitle>
           <DialogDescription>
-            {bank} — tasa de interés que aplica la tarjeta cada mes.
+            {bank} — tasa de interés y modelo de límite.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 py-2">
+        <div className="space-y-4 py-2">
           <div className="space-y-1.5">
             <label htmlFor="rate" className="text-sm font-medium">
               Tasa mensual (%)
@@ -133,6 +162,26 @@ export function CardRateDialog({
               Ejemplo: 2.55 equivale a 2.55 % mensual.
             </p>
           </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5 pr-3">
+              <p className="text-sm font-medium">Límite compartido DOP/USD</p>
+              <p className="text-xs text-muted-foreground">
+                Un solo balance entre ambas monedas
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant={shared ? "default" : "outline"}
+              size="sm"
+              onClick={() => toggleShared(!shared)}
+              disabled={toggling}
+              className="shrink-0"
+            >
+              {toggling ? "Guardando..." : shared ? "Sí" : "No"}
+            </Button>
+          </div>
+
           {currentRate !== null && (
             <Button
               type="button"

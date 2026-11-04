@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { addMonthsClamped, projectCard, simulateLoan } from "./projection";
+import {
+  addMonthsClamped,
+  cardUtilization,
+  projectCard,
+  simulateLoan,
+  type CardUtilizationInput,
+} from "./projection";
 import { fixtureSnapshot } from "./sheets/fixture";
 import type { CardAccount, Loan, LoanAbono } from "./types";
 
@@ -18,6 +24,19 @@ function card(overrides: Partial<CardAccount> = {}): CardAccount {
     minPaymentDop: null,
     minPaymentUsd: null,
     monthlyRate: null,
+    ...overrides,
+  };
+}
+
+function utilCard(
+  overrides: Partial<CardUtilizationInput> = {},
+): CardUtilizationInput {
+  return {
+    statementBalanceDop: null,
+    statementBalanceUsd: null,
+    limitDop: null,
+    limitUsd: null,
+    sharedLimitDopUsd: false,
     ...overrides,
   };
 }
@@ -201,6 +220,171 @@ describe("projectCard", () => {
       endDate: "2026-11-04",
     });
     expect(projection.minPayoffBlockedReason).toBeNull();
+  });
+});
+
+describe("cardUtilization", () => {
+  test("shared pool (APAP): USD balance consumes the DOP limit at the tasa", () => {
+    const utilization = cardUtilization(
+      utilCard({
+        limitDop: 85000,
+        statementBalanceDop: null,
+        statementBalanceUsd: 607.63,
+        limitUsd: null,
+        sharedLimitDopUsd: true,
+      }),
+      61.5,
+    );
+
+    // (0 + 607.63 × 61.5) / 85,000 = 37,369.245 / 85,000 = 0.439638…
+    expect(utilization.kind).toBe("shared");
+    expect(utilization.combined).toBeCloseTo(0.4396, 4);
+    expect(utilization.combined).toBeCloseTo((607.63 * 61.5) / 85000, 10);
+    expect(utilization.dop).toBeNull();
+    expect(utilization.usd).toBeNull();
+  });
+
+  test("shared pool adds both balances in DOP terms", () => {
+    const utilization = cardUtilization(
+      utilCard({
+        limitDop: 10000,
+        statementBalanceDop: 2000,
+        statementBalanceUsd: 100,
+        sharedLimitDopUsd: true,
+      }),
+      50,
+    );
+
+    expect(utilization.combined).toBeCloseTo(0.7, 10);
+  });
+
+  test("shared pool is null without a usable DOP limit", () => {
+    for (const limitDop of [null, 0]) {
+      const utilization = cardUtilization(
+        utilCard({
+          limitDop,
+          statementBalanceUsd: 607.63,
+          sharedLimitDopUsd: true,
+        }),
+        61.5,
+      );
+      expect(utilization.kind).toBe("shared");
+      expect(utilization.combined).toBeNull();
+      expect(utilization.dop).toBeNull();
+      expect(utilization.usd).toBeNull();
+    }
+  });
+
+  test("shared pool treats missing balances as unknown, not zero", () => {
+    const utilization = cardUtilization(
+      utilCard({ limitDop: 85000, sharedLimitDopUsd: true }),
+      61.5,
+    );
+
+    expect(utilization.kind).toBe("shared");
+    expect(utilization.combined).toBeNull();
+  });
+
+  test("separate pools: DOP and USD utilization are independent", () => {
+    const utilization = cardUtilization(
+      utilCard({
+        limitDop: 10000,
+        statementBalanceDop: 2500,
+        limitUsd: 200,
+        statementBalanceUsd: 50,
+      }),
+      60.5,
+    );
+
+    expect(utilization.kind).toBe("separate");
+    expect(utilization.dop).toBeCloseTo(0.25, 10);
+    expect(utilization.usd).toBeCloseTo(0.25, 10);
+    expect(utilization.combined).toBeNull();
+  });
+
+  test("separate pools: a missing USD limit leaves usd null", () => {
+    const utilization = cardUtilization(
+      utilCard({
+        limitDop: 85000,
+        statementBalanceUsd: 607.63,
+        limitUsd: null,
+      }),
+      61.5,
+    );
+
+    expect(utilization.kind).toBe("separate");
+    expect(utilization.dop).toBeNull();
+    expect(utilization.usd).toBeNull();
+  });
+
+  test("separate pools: a missing balance is null, not 0% usage", () => {
+    const utilization = cardUtilization(
+      utilCard({
+        limitDop: 31000,
+        limitUsd: 300,
+        statementBalanceDop: null,
+        statementBalanceUsd: null,
+      }),
+      60.5,
+    );
+
+    expect(utilization.kind).toBe("separate");
+    expect(utilization.dop).toBeNull();
+    expect(utilization.usd).toBeNull();
+    expect(utilization.combined).toBeNull();
+  });
+
+  test("separate pools: a paid-off pool reports 0% usage", () => {
+    const utilization = cardUtilization(
+      utilCard({
+        limitDop: 31000,
+        statementBalanceDop: 0,
+        limitUsd: 300,
+        statementBalanceUsd: 0,
+      }),
+      60.5,
+    );
+
+    expect(utilization.dop).toBe(0);
+    expect(utilization.usd).toBe(0);
+  });
+
+  test("no usable limits at all is kind none", () => {
+    const utilization = cardUtilization(
+      utilCard({ statementBalanceDop: 1000, statementBalanceUsd: 10 }),
+      60.5,
+    );
+
+    expect(utilization).toEqual({
+      kind: "none",
+      combined: null,
+      dop: null,
+      usd: null,
+    });
+  });
+
+  test("utilization is a raw fraction (not clamped or rounded)", () => {
+    const utilization = cardUtilization(
+      utilCard({ limitDop: 10000, statementBalanceDop: 15000 }),
+      60.5,
+    );
+
+    expect(utilization.dop).toBeCloseTo(1.5, 10);
+  });
+
+  test("APAP fixture card reports a single shared pool", () => {
+    const apap = fixtureSnapshot().cards.find((entry) => entry.id === "apap");
+    if (!apap) {
+      throw new Error("Fixture is missing the apap card.");
+    }
+
+    const utilization = cardUtilization(
+      { ...apap, sharedLimitDopUsd: true },
+      60.5,
+    );
+
+    expect(utilization.kind).toBe("shared");
+    expect(utilization.combined).toBeCloseTo((607.63 * 60.5) / 85000, 10);
   });
 });
 

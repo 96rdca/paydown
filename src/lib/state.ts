@@ -78,10 +78,13 @@ export async function getFinancialState(
   const today = todayIso();
 
   const cards: AugmentedCard[] = snapshot.cards.map((card) => {
-    const overlayRate = overlay.cards[card.id]?.monthlyRate ?? null;
+    const config = overlay.cards[card.id];
+    const overlayRate = config?.monthlyRate ?? null;
     // The app-owned rate overrides the sheet's (currently always null).
     const monthlyRate = overlayRate ?? card.monthlyRate;
-    const base = { ...card, monthlyRate };
+    // App-owned config; missing means separate DOP/USD pools.
+    const sharedLimitDopUsd = config?.sharedLimitDopUsd ?? false;
+    const base = { ...card, monthlyRate, sharedLimitDopUsd };
     const payments: CardPayment[] = newestFirst(
       overlay.cardPayments.filter((payment) => payment.cardId === card.id),
     );

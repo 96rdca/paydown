@@ -67,15 +67,19 @@ describe("overlay store", () => {
 
   test("setCardRate persists and can be read back by a new store", async () => {
     const config = await store.setCardRate("bhd-mi-pais", 0.0255);
-    expect(config).toEqual({ monthlyRate: 0.0255 });
+    expect(config).toEqual({ monthlyRate: 0.0255, sharedLimitDopUsd: false });
 
     const reloaded = createOverlayStore({ filePath });
     const overlay = await reloaded.read();
-    expect(overlay.cards["bhd-mi-pais"]).toEqual({ monthlyRate: 0.0255 });
+    expect(overlay.cards["bhd-mi-pais"]).toEqual({
+      monthlyRate: 0.0255,
+      sharedLimitDopUsd: false,
+    });
 
     const raw = JSON.parse(await readFile(filePath, "utf8"));
     expect(raw.version).toBe(1);
     expect(raw.cards["bhd-mi-pais"].monthlyRate).toBe(0.0255);
+    expect(raw.cards["bhd-mi-pais"].sharedLimitDopUsd).toBe(false);
   });
 
   test("setCardRate(null) clears the rate without dropping the card", async () => {
@@ -83,7 +87,86 @@ describe("overlay store", () => {
     await store.setCardRate("apap", null);
 
     const overlay = await store.read();
-    expect(overlay.cards["apap"]).toEqual({ monthlyRate: null });
+    expect(overlay.cards["apap"]).toEqual({
+      monthlyRate: null,
+      sharedLimitDopUsd: false,
+    });
+  });
+
+  test("setCardRate preserves a configured shared-pool flag", async () => {
+    await store.setCardConfig("apap", { sharedLimitDopUsd: true });
+    const config = await store.setCardRate("apap", 0.0255);
+
+    expect(config).toEqual({ monthlyRate: 0.0255, sharedLimitDopUsd: true });
+  });
+
+  test("setCardConfig applies only the provided keys", async () => {
+    const first = await store.setCardConfig("apap", {
+      sharedLimitDopUsd: true,
+    });
+    expect(first).toEqual({ monthlyRate: null, sharedLimitDopUsd: true });
+
+    const second = await store.setCardConfig("apap", { monthlyRate: 0.03 });
+    expect(second).toEqual({ monthlyRate: 0.03, sharedLimitDopUsd: true });
+
+    const third = await store.setCardConfig("apap", { monthlyRate: null });
+    expect(third).toEqual({ monthlyRate: null, sharedLimitDopUsd: true });
+
+    // A separate-pool card can be switched back explicitly.
+    const fourth = await store.setCardConfig("apap", {
+      sharedLimitDopUsd: false,
+    });
+    expect(fourth).toEqual({ monthlyRate: null, sharedLimitDopUsd: false });
+
+    const onDisk = JSON.parse(await readFile(filePath, "utf8"));
+    expect(onDisk.cards["apap"]).toEqual({
+      monthlyRate: null,
+      sharedLimitDopUsd: false,
+    });
+  });
+
+  test("setCardConfig rejects empty patches and invalid values", async () => {
+    const empty = await errorFrom(() => store.setCardConfig("apap", {}));
+    expect(empty.message).toContain("At least one");
+
+    const badFlag = await errorFrom(() =>
+      // @ts-expect-error — runtime validation of a non-boolean payload.
+      store.setCardConfig("apap", { sharedLimitDopUsd: "yes" }),
+    );
+    expect(badFlag.message).toContain("sharedLimitDopUsd");
+
+    const badRate = await errorFrom(() =>
+      store.setCardConfig("apap", { monthlyRate: 1.5 }),
+    );
+    expect(badRate.message).toContain("monthlyRate");
+
+    expect(await fileExists(filePath)).toBe(false);
+  });
+
+  test("an overlay file without sharedLimitDopUsd reads as separate pools", async () => {
+    await mkdir(join(dir, "data"), { recursive: true });
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        cards: { apap: { monthlyRate: 0.0255 } },
+        cardPayments: [],
+        loanAbonos: [],
+      }),
+      "utf8",
+    );
+
+    const overlay = await store.read();
+    expect(overlay.cards["apap"]).toEqual({
+      monthlyRate: 0.0255,
+      sharedLimitDopUsd: false,
+    });
+
+    // A partial patch keeps the legacy rate and writes the normalized flag.
+    const config = await store.setCardConfig("apap", {
+      sharedLimitDopUsd: true,
+    });
+    expect(config).toEqual({ monthlyRate: 0.0255, sharedLimitDopUsd: true });
   });
 
   test("setCardRate rejects invalid rates", async () => {
@@ -242,6 +325,12 @@ describe("overlay store", () => {
       {
         version: 1,
         cards: { apap: { monthlyRate: 2 } },
+        cardPayments: [],
+        loanAbonos: [],
+      },
+      {
+        version: 1,
+        cards: { apap: { monthlyRate: null, sharedLimitDopUsd: "yes" } },
         cardPayments: [],
         loanAbonos: [],
       },

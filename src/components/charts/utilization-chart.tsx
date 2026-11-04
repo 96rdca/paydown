@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDop, formatUsd } from "@/lib/format";
+import { formatDop } from "@/lib/format";
 import {
   ChartContainer,
   ChartTooltip,
@@ -17,8 +17,15 @@ import {
 export interface UtilizationChartData {
   name: string;
   utilizacion: number;
-  balance: number;
-  usdBalance: number | null;
+  kind: "separate" | "shared" | "none";
+  dopUtil: number | null;
+  usdUtil: number | null;
+  combinedUtil: number | null;
+  balanceDop: number | null;
+  balanceUsd: number | null;
+  limitDop: number | null;
+  limitUsd: number | null;
+  rate: number;
 }
 
 export function UtilizationChart({
@@ -48,15 +55,38 @@ export function UtilizationChart({
         <ChartTooltip
           content={
             <ChartTooltipContent
-              formatter={(value, _name, item) => (
-                <span>
-                  {value}% ({formatDop(item.payload.balance)}
-                  {item.payload.usdBalance
-                    ? ` · ${formatUsd(item.payload.usdBalance)}`
-                    : ""}
-                  )
-                </span>
-              )}
+              formatter={(_value, _name, item) => {
+                const payload = item.payload as UtilizationChartData;
+                if (payload.kind === "shared") {
+                  const combinedBalance =
+                    (payload.balanceDop ?? 0) +
+                    (payload.balanceUsd ?? 0) * payload.rate;
+                  return (
+                    <span>
+                      {payload.utilizacion}% (
+                      {formatDop(combinedBalance)} / {formatDop(payload.limitDop)})
+                    </span>
+                  );
+                }
+
+                const parts: string[] = [];
+                if (payload.dopUtil !== null) {
+                  parts.push(`DOP ${(payload.dopUtil * 100).toFixed(1)}%`);
+                }
+                if (payload.usdUtil !== null) {
+                  parts.push(`USD ${(payload.usdUtil * 100).toFixed(1)}%`);
+                }
+                return (
+                  <span>
+                    {payload.utilizacion}%
+                    {parts.length > 0 && (
+                      <>
+                        {" "}({parts.join(" · ")})
+                      </>
+                    )}
+                  </span>
+                );
+              }}
             />
           }
         />

@@ -16,8 +16,9 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UtilizationChart } from "@/components/charts/utilization-chart";
 import { LoanBalanceChart } from "@/components/charts/loan-balance-chart";
+import { cardUtilization } from "@/lib/projection";
 import type {
-  CardAccount,
+  AugmentedCard,
   Loan,
   LoanInstallment,
   PayPeriod,
@@ -77,19 +78,6 @@ function DashboardSkeleton() {
       </div>
     </div>
   );
-}
-
-function calculateUtilization(card: CardAccount, rate: number): number | null {
-  const limitDop = card.limitDop ?? 0;
-  const limitUsdDop = (card.limitUsd ?? 0) * rate;
-  const balanceDop = card.statementBalanceDop ?? 0;
-  const balanceUsdDop = (card.statementBalanceUsd ?? 0) * rate;
-  const limit = limitDop + limitUsdDop;
-  const balance = balanceDop + balanceUsdDop;
-  if (limit === 0 || (card.limitDop === null && card.limitUsd === null)) {
-    return null;
-  }
-  return balance / limit;
 }
 
 function upcomingPayments(snapshot: Snapshot) {
@@ -164,19 +152,31 @@ function loanBalanceData(loan: Loan) {
   }));
 }
 
-function cardUtilizationData(cards: CardAccount[], rate: number) {
+function cardUtilizationData(cards: AugmentedCard[], rate: number) {
   return cards
     .map((card) => {
-      const util = calculateUtilization(card, rate);
+      const util = cardUtilization(card, rate);
+      const worst =
+        util.kind === "none"
+          ? null
+          : util.kind === "shared"
+            ? util.combined
+            : Math.max(util.dop ?? 0, util.usd ?? 0) || null;
       return {
         name: card.bank,
-        utilizacion: util !== null ? Math.round(util * 100) : 0,
-        balance: card.statementBalanceDop ?? 0,
-        usdBalance: card.statementBalanceUsd ?? null,
-        util,
+        utilizacion: worst !== null ? Math.min(100, Math.round(worst * 100)) : 0,
+        kind: util.kind,
+        dopUtil: util.dop,
+        usdUtil: util.usd,
+        combinedUtil: util.combined,
+        balanceDop: card.statementBalanceDop,
+        balanceUsd: card.statementBalanceUsd,
+        limitDop: card.limitDop,
+        limitUsd: card.limitUsd,
+        rate,
       };
     })
-    .filter((c) => c.util !== null)
+    .filter((c) => c.kind !== "none")
     .sort((a, b) => b.utilizacion - a.utilizacion);
 }
 
@@ -235,7 +235,7 @@ async function DashboardContent() {
   const payments = upcomingPayments(snapshot);
 
   const autoLoan = snapshot.loans.find((l) => l.id === "auto-loan");
-  const utilizationData = cardUtilizationData(snapshot.cards, rate);
+  const utilizationData = cardUtilizationData(state.cards, rate);
 
   return (
     <div className="space-y-8">

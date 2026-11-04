@@ -5,8 +5,8 @@ import { isSheetWriteConfigured } from "@/lib/gsheets/config";
 import { formatDop } from "@/lib/format";
 import { Footer } from "@/components/footer";
 import { SheetEditMoneyEndpoint } from "@/components/sheet-edit";
+import { EditableItemRow, ReadOnlyItemRow, AddExpenseForm } from "@/components/quincena-editor";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -38,25 +38,6 @@ function EditableSalary({
   );
 }
 
-function EditableItemAmount({
-  periodId,
-  item,
-  editable,
-}: {
-  periodId: string;
-  item: BudgetItem;
-  editable: boolean;
-}) {
-  if (!editable) return <span>{formatDop(item.amountDop)}</span>;
-  return (
-    <SheetEditMoneyEndpoint
-      value={item.amountDop}
-      endpoint={`/api/sheet/periods/${encodeURIComponent(periodId)}/items/${encodeURIComponent(item.id)}`}
-      before={item.amountDop}
-    />
-  );
-}
-
 function PeriodPanel({
   period,
   editable,
@@ -65,6 +46,8 @@ function PeriodPanel({
   editable: boolean;
 }) {
   const committed = period.salary - period.surplusDop;
+  const hasItems = period.items.length > 0;
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-3">
@@ -94,37 +77,51 @@ function PeriodPanel({
         </Card>
       </div>
 
-      <div className="rounded-xl border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Concepto</TableHead>
-              <TableHead className="text-right">Monto</TableHead>
-              <TableHead className="text-right">Nota</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {period.items.map((item: BudgetItem) => (
-              <TableRow key={item.id}>
-                <TableCell className="font-medium">{item.label}</TableCell>
-                <TableCell className="text-right">
-                  <EditableItemAmount periodId={period.id} item={item} editable={editable} />
-                </TableCell>
-                <TableCell className="text-right">
-                  {item.isUsdBilled && (
-                    <Badge variant="outline">Facturado en USD</Badge>
-                  )}
-                </TableCell>
+      {!hasItems ? (
+        <div className="rounded-xl border border-dashed p-6 text-center">
+          <p className="text-muted-foreground">Sin gastos — agrega el primero</p>
+          {editable && (
+            <div className="mt-4 flex justify-center">
+              <AddExpenseForm periodId={period.id} defaultOpen />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Concepto</TableHead>
+                <TableHead className="text-right">Monto</TableHead>
+                <TableHead className="text-right">Nota</TableHead>
+                {editable && <TableHead className="text-right">Acción</TableHead>}
               </TableRow>
-            ))}
-            <TableRow className="bg-muted/50 font-medium">
-              <TableCell>Total</TableCell>
-              <TableCell className="text-right">{formatDop(committed)}</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {period.items.map((item: BudgetItem) => (
+                <TableRow key={item.id}>
+                  {editable ? (
+                    <EditableItemRow periodId={period.id} item={item} />
+                  ) : (
+                    <ReadOnlyItemRow item={item} />
+                  )}
+                </TableRow>
+              ))}
+              <TableRow className="bg-muted/50 font-medium">
+                <TableCell>Total</TableCell>
+                <TableCell className="text-right">{formatDop(committed)}</TableCell>
+                <TableCell />
+                {editable && <TableCell />}
+              </TableRow>
+            </TableBody>
+          </Table>
+          {editable && (
+            <div className="border-t p-3">
+              <AddExpenseForm periodId={period.id} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

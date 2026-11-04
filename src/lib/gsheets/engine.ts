@@ -18,11 +18,13 @@ import type { FinancialState } from "@/lib/types";
 import { getFinancialState } from "@/lib/state";
 import { parseCsv } from "@/lib/sheets/csv";
 import { TAB_TIMEOUT_MS, TABS, type TabKey } from "@/lib/sheets/fetch";
-import type { Grid } from "@/lib/sheets/grid";
+import { cellAt, type Grid } from "@/lib/sheets/grid";
 import { invalidateSnapshotCache } from "@/lib/sheets/snapshot";
+import { parseNumber } from "@/lib/sheets/values";
 import { isSheetWriteConfigured, spreadsheetId } from "./config";
 import {
   assertNoConflict,
+  numbersMatch,
   valuesMatch,
   type ConflictKind,
 } from "./conflict";
@@ -31,21 +33,36 @@ import {
   NotConfiguredError,
   UnknownEntityError,
   UpstreamError,
+  WriteConflictError,
 } from "./errors";
 import {
   CARD_FIELDS,
+  findPeriodItemRow,
   isCardField,
+  isStructuralRow,
   loanTab,
   normalizePeriodId,
   resolveCardField,
   resolveDebtAmount,
   resolveDebtDueDate,
+  resolveInsertionPoint,
   resolveLoanCuotaStatus,
+  resolvePeriodBlock,
   resolvePeriodItem,
   resolvePeriodSalary,
   resolveUsdRate,
+  toA1,
+  type PeriodItemRow,
   type ResolvedCell,
 } from "./resolve";
+import {
+  batchUpdate,
+  deleteRowRequest,
+  insertRowRequest,
+  normalizeItemLabel,
+  removalMode,
+  SHEET1_GID,
+} from "./rows";
 import { writeCell } from "./write";
 
 /** Tabs that can be edited today (the read-only savings tab is absent). */
@@ -408,4 +425,352 @@ export function debtEdits(
   }
 
   return edits;
+}
+
+/* ───────────────────────── Row operations ───────────────────────── */
+
+/**
+ * Row mutations cannot ride on `CellEdit`: `insertDimension`/`deleteDimension`
+ * shift every coordinate below the change, so the pre-mutation resolutions are
+ * valid only for the requests themselves. These operations therefore follow
+ * their own sequence:
+ *
+ *   fresh parse → resolve + validate anchors → conflict check →
+ *   mutate → force re-read → verify (retry for CSV lag) → fresh state
+ *
+ * The post-mutation read re-resolves the anchors before anything is claimed as
+ * verified, so a dimension change that would have moved the "Sueldo"/"Razon"
+ * rows elsewhere fails loudly instead of returning a plausible wrong state.
+ */
+export interface RowOpOptions {
+  /** Test seam: replace the global fetch. */
+  fetchImpl?: typeof fetch;
+  /** Test seam: replace service-account token acquisition. */
+  getToken?: () => Promise<string>;
+  /** Test seam: fresh Sheet1 read. Defaults to the uncached CSV export. */
+  readGrid?: () => Promise<Grid>;
+  /** Test seam: fresh state builder. Defaults to `force: true`. */
+  loadState?: () => Promise<FinancialState>;
+  /** Test seam: delay between verification attempts (default 400ms). */
+  verifyDelayMs?: number;
+}
+
+/** What the UI last showed for the row it wants to remove. */
+export interface ExpectedItem {
+  label: string;
+  amountDop: number;
+}
+
+const ROW_VERIFY_ATTEMPTS = 3;
+const ROW_VERIFY_DELAY_MS = 400;
+
+function validateItemAmount(value: unknown, field = "amountDop"): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new InvalidTargetError(`"${field}" must be a finite number.`);
+  }
+  if (value < 0) {
+    throw new InvalidTargetError(`"${field}" must be >= 0.`);
+  }
+  return value;
+}
+
+function validateItemId(itemId: unknown): string {
+  if (typeof itemId !== "string" || itemId.trim() === "") {
+    throw new InvalidTargetError('"itemId" must be a non-empty string.');
+  }
+  return itemId.trim();
+}
+
+function writeOptions(options: RowOpOptions): {
+  fetchImpl?: typeof fetch;
+  getToken?: () => Promise<string>;
+} {
+  return { fetchImpl: options.fetchImpl, getToken: options.getToken };
+}
+
+/**
+ * Re-reads the tab and proves the mutation landed. Google's CSV export can lag
+ * the Sheets API by a moment, so a mismatch is retried briefly before it
+ * becomes a 502 — a successful mutation must never look like a failure.
+ */
+async function verifyRowMutation(
+  check: () => Promise<string | null>,
+  delayMs: number,
+): Promise<void> {
+  let lastProblem = "la hoja no reflejó el cambio";
+
+  for (let attempt = 1; attempt <= ROW_VERIFY_ATTEMPTS; attempt += 1) {
+    let problem: string | null;
+
+    try {
+      problem = await check();
+    } catch (error) {
+      // Anything thrown here happens after a successful mutation, so it is a
+      // verification/upstream problem, never a bad entity id.
+      problem = `no se pudo releer la hoja: ${describeError(error)}`;
+    }
+
+    if (problem === null) {
+      return;
+    }
+    lastProblem = problem;
+
+    if (attempt < ROW_VERIFY_ATTEMPTS) {
+      await sleep(delayMs);
+    }
+  }
+
+  throw new UpstreamError(
+    `El cambio de filas no se pudo verificar: ${lastProblem}.`,
+  );
+}
+
+function itemRowOrThrow(
+  grid: Grid,
+  periodId: string,
+  itemId: string,
+): PeriodItemRow {
+  const target = findPeriodItemRow(grid, periodId, itemId);
+  if (!target) {
+    throw new UnknownEntityError(
+      `Unknown item id ${JSON.stringify(itemId)} in period "${periodId}".`,
+    );
+  }
+  return target;
+}
+
+/**
+ * POST /items — inserts a row after the block's last item (or after "Sueldo"
+ * when it has none) and writes A=label, B=amount into it.
+ */
+export async function addItemRow(
+  periodId: string,
+  label: string,
+  amountDop: number,
+  options: RowOpOptions = {},
+): Promise<FinancialState> {
+  const id = normalizePeriodId(periodId);
+  const cleanLabel = normalizeItemLabel(label);
+  const amount = validateItemAmount(amountDop);
+
+  if (!isSheetWriteConfigured()) {
+    throw new NotConfiguredError();
+  }
+
+  const readGrid = options.readGrid ?? (() => readFreshTab("sheet1"));
+  const loadState =
+    options.loadState ?? (() => getFinancialState({ force: true }));
+  const writes = writeOptions(options);
+
+  const before = await readGrid();
+  // Validates every anchor BEFORE the sheet is touched.
+  const point = resolveInsertionPoint(before, id);
+
+  await batchUpdate([insertRowRequest(SHEET1_GID, point.insertIndex)], writes);
+
+  // The new row occupies 0-based `insertIndex` (1-based insertIndex + 1). No
+  // pre-mutation coordinate is reused for anything below this line.
+  await writeCell("Sheet1", toA1(point.insertIndex, 0), cleanLabel, writes);
+  await writeCell("Sheet1", toA1(point.insertIndex, 1), amount, writes);
+
+  invalidateSnapshotCache();
+
+  await verifyRowMutation(async () => {
+    const grid = await readGrid();
+    // Re-validate the whole block: the inserted row must not have pushed the
+    // anchors somewhere the reader no longer recognizes.
+    const block = resolvePeriodBlock(grid, id);
+
+    if (point.insertIndex <= block.salaryRow || point.insertIndex >= block.endRow) {
+      return (
+        `la fila insertada (${point.insertIndex + 1}) quedó fuera del bloque ` +
+        `${id} (Sueldo ${block.salaryRow + 1}, fin ${block.endRow + 1})`
+      );
+    }
+
+    if (!block.itemRows.includes(point.insertIndex)) {
+      return `la fila ${point.insertIndex + 1} no quedó como partida de ${id}`;
+    }
+
+    const actualLabel = cellAt(grid, point.insertIndex, 0).trim();
+    if (actualLabel !== cleanLabel) {
+      return (
+        `la fila ${point.insertIndex + 1} tiene ${JSON.stringify(
+          actualLabel,
+        )} en A en vez de ${JSON.stringify(cleanLabel)}`
+      );
+    }
+
+    const actualAmount = parseNumber(cellAt(grid, point.insertIndex, 1));
+    if (actualAmount == null || !numbersMatch(amount, actualAmount)) {
+      return (
+        `la fila ${point.insertIndex + 1} tiene ${JSON.stringify(
+          cellAt(grid, point.insertIndex, 1),
+        )} en B en vez de ${JSON.stringify(amount)}`
+      );
+    }
+
+    return null;
+  }, options.verifyDelayMs ?? ROW_VERIFY_DELAY_MS);
+
+  return loadState();
+}
+
+/**
+ * DELETE /items/:itemId — conflict-checks the row the UI last showed, then
+ * removes it adaptively: clear A/B when the row shares its line with any other
+ * block, delete the whole row only when the rest is empty.
+ */
+export async function removeItemRow(
+  periodId: string,
+  itemId: string,
+  expected: ExpectedItem,
+  options: RowOpOptions = {},
+): Promise<FinancialState> {
+  const id = normalizePeriodId(periodId);
+  const targetId = validateItemId(itemId);
+
+  if (
+    typeof expected !== "object" ||
+    expected === null ||
+    Array.isArray(expected)
+  ) {
+    throw new InvalidTargetError(
+      '"expected" must be an object with the row\'s label and amountDop.',
+    );
+  }
+  const expectedLabel = normalizeItemLabel(expected.label);
+  const expectedAmount = validateItemAmount(expected.amountDop);
+
+  if (!isSheetWriteConfigured()) {
+    throw new NotConfiguredError();
+  }
+
+  const readGrid = options.readGrid ?? (() => readFreshTab("sheet1"));
+  const loadState =
+    options.loadState ?? (() => getFinancialState({ force: true }));
+  const writes = writeOptions(options);
+
+  const before = await readGrid();
+  const target = itemRowOrThrow(before, id, targetId);
+
+  // Conflict check: both values the UI showed must still be on that row.
+  if (
+    target.label !== expectedLabel ||
+    !numbersMatch(expectedAmount, target.amountDop)
+  ) {
+    throw new WriteConflictError(
+      `La hoja cambió: la fila "${targetId}" ahora es ${JSON.stringify(
+        target.label,
+      )} / ${JSON.stringify(target.amountDop)} y la app esperaba ` +
+        `${JSON.stringify(expectedLabel)} / ${JSON.stringify(expectedAmount)}. ` +
+        `Recarga y vuelve a intentar.`,
+      { label: target.label, amountDop: target.amountDop },
+    );
+  }
+
+  const mode = removalMode(before, target.row);
+
+  if (mode === "delete") {
+    // Never remove a structural row, even if resolution were ever wrong.
+    if (isStructuralRow(before, target.row)) {
+      throw new UpstreamError(
+        `Se rechazó borrar la fila ${target.row + 1}: es una fila estructural de Sheet1.`,
+      );
+    }
+    await batchUpdate([deleteRowRequest(SHEET1_GID, target.row)], writes);
+  } else {
+    // Shared line (Deudas / cards / anything in C..): clear only A and B.
+    await writeCell("Sheet1", toA1(target.row, 0), "", writes);
+    await writeCell("Sheet1", toA1(target.row, 1), "", writes);
+  }
+
+  invalidateSnapshotCache();
+
+  const modeLabel =
+    mode === "delete" ? "borrar la fila" : "limpiar las celdas A/B de la fila";
+
+  await verifyRowMutation(async () => {
+    const grid = await readGrid();
+    resolvePeriodBlock(grid, id); // anchors must still parse
+
+    const stillThere = findPeriodItemRow(grid, id, targetId);
+    if (stillThere) {
+      return (
+        `la fila "${targetId}" sigue presente en la hoja ` +
+        `(fila ${stillThere.row + 1}) tras ${modeLabel}`
+      );
+    }
+
+    return null;
+  }, options.verifyDelayMs ?? ROW_VERIFY_DELAY_MS);
+
+  return loadState();
+}
+
+/**
+ * PUT /items/:itemId/label — renames the item in column A only.
+ *
+ * The item id is derived from the label, so the response state carries the new
+ * id; the UI must refresh from it rather than keep the old id.
+ */
+export async function renameItemLabel(
+  periodId: string,
+  itemId: string,
+  before: string,
+  after: string,
+  options: RowOpOptions = {},
+): Promise<FinancialState> {
+  const id = normalizePeriodId(periodId);
+  const targetId = validateItemId(itemId);
+  const beforeLabel = normalizeItemLabel(before, "before");
+  const afterLabel = normalizeItemLabel(after, "after");
+
+  if (!isSheetWriteConfigured()) {
+    throw new NotConfiguredError();
+  }
+
+  const readGrid = options.readGrid ?? (() => readFreshTab("sheet1"));
+  const loadState =
+    options.loadState ?? (() => getFinancialState({ force: true }));
+  const writes = writeOptions(options);
+
+  const grid = await readGrid();
+  const target = itemRowOrThrow(grid, id, targetId);
+
+  if (target.label !== beforeLabel) {
+    throw new WriteConflictError(
+      `La hoja cambió: la fila "${targetId}" ahora se llama ${JSON.stringify(
+        target.label,
+      )} y la app esperaba ${JSON.stringify(beforeLabel)}. ` +
+        `Recarga y vuelve a intentar.`,
+      target.label,
+    );
+  }
+
+  // Exactly one cell: column A of the resolved row.
+  await writeCell("Sheet1", toA1(target.row, 0), afterLabel, writes);
+
+  invalidateSnapshotCache();
+
+  await verifyRowMutation(async () => {
+    const fresh = await readGrid();
+    const block = resolvePeriodBlock(fresh, id);
+
+    if (!block.itemRows.includes(target.row)) {
+      return `la fila ${target.row + 1} ya no está en el bloque ${id}`;
+    }
+
+    const actual = cellAt(fresh, target.row, 0).trim();
+    if (actual !== afterLabel) {
+      return (
+        `la fila ${target.row + 1} tiene ${JSON.stringify(actual)} en A en vez ` +
+        `de ${JSON.stringify(afterLabel)}`
+      );
+    }
+
+    return null;
+  }, options.verifyDelayMs ?? ROW_VERIFY_DELAY_MS);
+
+  return loadState();
 }

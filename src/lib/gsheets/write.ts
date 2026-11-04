@@ -49,7 +49,7 @@ function assertSafeRange(range: string): void {
   }
 }
 
-function describeFetchError(error: unknown): string {
+export function describeFetchError(error: unknown): string {
   if (error instanceof Error) {
     if (error.name === "TimeoutError" || error.name === "AbortError") {
       return `sin respuesta después de ${WRITE_TIMEOUT_MS}ms`;
@@ -60,7 +60,7 @@ function describeFetchError(error: unknown): string {
 }
 
 /** Google puts the actionable text in `error.message`; keep it for the UI. */
-async function googleErrorMessage(response: Response): Promise<string> {
+export async function googleErrorMessage(response: Response): Promise<string> {
   try {
     const parsed: unknown = await response.json();
     if (typeof parsed === "object" && parsed !== null) {

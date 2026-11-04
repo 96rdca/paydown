@@ -263,15 +263,28 @@ export function resolvePeriodSalary(grid: Grid, periodId: string): ResolvedCell 
   };
 }
 
+/** One labelled expense row inside a quincena block (cols A/B). */
+export interface PeriodItemRow {
+  /** 0-based row index. */
+  row: number;
+  label: string;
+  amountRaw: string;
+  /** Parsed column B; null when the cell is empty or unparseable. */
+  amountDop: number | null;
+}
+
 /**
- * Budget item cell: the row whose label slugifies to the item id inside the
- * right quincena block (item ids are `${period}-${slug(label)}`), column B.
+ * The item row for an id inside a quincena block, or null.
+ *
+ * Mirrors `parseSheet1`/`resolvePeriodItem`: items start below that block's
+ * "Sueldo", stop at the next block anchor ("Razon" for Q30), and their id is
+ * `${period}-${slug(label)}`.
  */
-export function resolvePeriodItem(
+export function findPeriodItemRow(
   grid: Grid,
   periodId: string,
   itemId: string,
-): ResolvedCell {
+): PeriodItemRow | null {
   const id = normalizePeriodId(periodId);
   const anchors = sheet1Anchors(grid);
   const { end } = periodBounds(anchors, id);
@@ -287,21 +300,171 @@ export function resolvePeriodItem(
       break;
     }
 
-    const candidateId = `${prefix}${slugify(label)}`;
-    if (candidateId !== itemId) {
+    if (`${prefix}${slugify(label)}` !== itemId) {
       continue;
     }
 
+    const amountRaw = cellAt(grid, row, 1);
     return {
-      ...cell(SHEET1, row, 1),
-      currentRaw: cellAt(grid, row, 1),
-      current: numericValue(cellAt(grid, row, 1)),
+      row,
+      label,
+      amountRaw,
+      amountDop: parseNumber(amountRaw),
     };
   }
 
-  throw new UnknownEntityError(
-    `Unknown item id ${JSON.stringify(itemId)} in period "${id}".`,
+  return null;
+}
+
+/** Budget item cell: the row whose label slugifies to the item id, column B. */
+export function resolvePeriodItem(
+  grid: Grid,
+  periodId: string,
+  itemId: string,
+): ResolvedCell {
+  const id = normalizePeriodId(periodId);
+  const target = findPeriodItemRow(grid, id, itemId);
+
+  if (!target) {
+    throw new UnknownEntityError(
+      `Unknown item id ${JSON.stringify(itemId)} in period "${id}".`,
+    );
+  }
+
+  return {
+    ...cell(SHEET1, target.row, 1),
+    currentRaw: target.amountRaw,
+    current: numericValue(target.amountRaw),
+  };
+}
+
+/** A quincena block as the reader sees it. Rows are 0-based. */
+export interface PeriodBlock {
+  periodId: PeriodId;
+  /** The block's "Sueldo" row. */
+  salaryRow: number;
+  /** Rows carrying an item label, in sheet order. Never includes the header. */
+  itemRows: number[];
+  /** Exclusive end: the next block's anchor row ("Q 30" / "Razon"). */
+  endRow: number;
+}
+
+/**
+ * Structural view of a quincena block, built from the reader's anchors.
+ *
+ * `parseSheet1` reads items from `salaryRow + 1` up to the next block anchor,
+ * skipping blank labels and stopping at "Razon". `itemRows` keeps every row
+ * with a label in that window — including a row whose amount is momentarily
+ * blank — because those rows still occupy the block and inserting after them
+ * keeps the owner's order intact.
+ */
+export function resolvePeriodBlock(
+  grid: Grid,
+  periodId: string,
+): PeriodBlock {
+  const id = normalizePeriodId(periodId);
+  const anchors = sheet1Anchors(grid);
+  const { end } = periodBounds(anchors, id);
+  const salaryRow = salaryRowOf(grid, anchors, id);
+  const itemRows: number[] = [];
+
+  for (let row = salaryRow + 1; row < Math.min(end, grid.length); row += 1) {
+    const label = cellAt(grid, row, 0).trim();
+    if (!label) {
+      continue;
+    }
+    if (norm(label) === "razon") {
+      break;
+    }
+    itemRows.push(row);
+  }
+
+  return { periodId: id, salaryRow, itemRows, endRow: end };
+}
+
+/** Where a new expense row must go for a quincena block. */
+export interface InsertionPoint {
+  periodId: PeriodId;
+  /** 0-based index the new row will occupy after `insertDimension`. */
+  insertIndex: number;
+  salaryRow: number;
+  /** Last item row, or null when the block has no items yet. */
+  lastItemRow: number | null;
+  endRow: number;
+}
+
+/**
+ * Insert AFTER the last item row; with no items, directly after "Sueldo".
+ *
+ * 0-based `insertIndex` is exactly the `startIndex` for the `insertDimension`
+ * batchUpdate request (the API's indices are 0-based and half-open).
+ */
+export function resolveInsertionPoint(
+  grid: Grid,
+  periodId: string,
+): InsertionPoint {
+  const block = resolvePeriodBlock(grid, periodId);
+  const lastItemRow =
+    block.itemRows.length > 0
+      ? block.itemRows[block.itemRows.length - 1]
+      : null;
+  const insertIndex =
+    lastItemRow === null ? block.salaryRow + 1 : lastItemRow + 1;
+
+  // Defence in depth: never insert above the salary row or outside the block.
+  if (
+    insertIndex <= block.salaryRow ||
+    insertIndex > block.endRow ||
+    insertIndex > grid.length
+  ) {
+    throw new SheetLayoutError(
+      SHEET1,
+      `an insertion row inside "${periodLabel(block.periodId)}"`,
+      `row ${insertIndex + 1}`,
+    );
+  }
+
+  return {
+    periodId: block.periodId,
+    insertIndex,
+    salaryRow: block.salaryRow,
+    lastItemRow,
+    endRow: block.endRow,
+  };
+}
+
+/**
+ * True when `row` is one of Sheet1's structural anchor rows (block headers,
+ * "Sueldo", card header, "Deudas" header). Such a row must never be deleted by
+ * a dimension request.
+ */
+export function isStructuralRow(grid: Grid, row: number): boolean {
+  const anchors = sheet1Anchors(grid);
+  const structural = new Set<number>([
+    anchors.q15.row,
+    anchors.q30.row,
+    anchors.q30SalaryRow,
+    anchors.razonRow,
+    anchors.cardsHeader.row,
+  ]);
+
+  // Both quincenas have their own "Sueldo" row; neither is removable.
+  const q15Salary = findInColumn(
+    grid,
+    0,
+    (value) => norm(value) === "sueldo",
+    anchors.q15.row + 1,
   );
+  if (q15Salary) {
+    structural.add(q15Salary.row);
+  }
+
+  const deudas = findCell(grid, (value) => norm(value) === "deudas");
+  if (deudas) {
+    structural.add(deudas.row);
+  }
+
+  return structural.has(row);
 }
 
 /** Bank name inside a card header ("BHD - Premia (18) -(12)" -> "BHD Premia"). */

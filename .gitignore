@@ -11,6 +11,9 @@ graphify-out/
 # Google service account key (Phase 2 write-back) — never commit
 .google-service-account.json
 
+# UI audit evidence artifacts (dated session captures, not source)
+.planning/ui-reviews/
+
 # dependencies
 /node_modules
 /.pnp

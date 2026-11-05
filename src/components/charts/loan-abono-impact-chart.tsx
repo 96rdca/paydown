@@ -68,11 +68,11 @@ export function LoanAbonoImpactChart({
       config={{
         sinAbono: {
           label: "Sin abono",
-          color: "hsl(var(--muted-foreground))",
+          color: "var(--muted-foreground)",
         },
         conAbono: {
           label: "Con abono simulado",
-          color: "hsl(var(--chart-2))",
+          color: "var(--chart-2)",
         },
       }}
       className="aspect-[16/9] w-full"
@@ -81,30 +81,33 @@ export function LoanAbonoImpactChart({
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis
           dataKey="mes"
-          tick={{ fontSize: 10 }}
-          label={{ value: "Cuota", position: "insideBottom", offset: -4, fontSize: 10 }}
+          tick={{ fontSize: 12 }}
+          label={{ value: "Cuota", position: "insideBottom", offset: -4, fontSize: 12 }}
         />
         <YAxis
-          tick={{ fontSize: 10 }}
+          tick={{ fontSize: 12 }}
           tickFormatter={(v: number) => `RD$${(v / 1000).toFixed(0)}k`}
         />
         <ChartTooltip
           content={
             <ChartTooltipContent
               labelFormatter={(label) => `Cuota ${label}`}
-              formatter={(value) =>
+              formatter={(value, name) =>
                 value !== null && value !== undefined
-                  ? [formatDop(typeof value === "number" ? value : 0), "Saldo"]
-                  : ["—", "Saldo"]
+                  ? [
+                      formatDop(typeof value === "number" ? value : 0),
+                      name === "conAbono" ? "Con abono simulado" : "Sin abono",
+                    ]
+                  : ["—", name === "conAbono" ? "Con abono simulado" : "Sin abono"]
               }
             />
           }
         />
-        <Legend iconType="line" wrapperStyle={{ fontSize: 11 }} />
+        <Legend iconType="line" wrapperStyle={{ fontSize: 12 }} />
         <Line
           type="monotone"
           dataKey="sinAbono"
-          stroke="hsl(var(--muted-foreground))"
+          stroke="var(--muted-foreground)"
           strokeDasharray="4 4"
           strokeWidth={2}
           dot={false}
@@ -113,7 +116,7 @@ export function LoanAbonoImpactChart({
         <Line
           type="monotone"
           dataKey="conAbono"
-          stroke="hsl(var(--chart-2))"
+          stroke="var(--chart-2)"
           strokeWidth={2}
           dot={false}
           connectNulls={false}

@@ -28,6 +28,15 @@ function NavSkeleton({ count }: { count: number }) {
 export function Shell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
+  React.useEffect(() => {
+    if (!mobileOpen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileOpen(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileOpen]);
+
   return (
     <div className="flex min-h-full flex-col">
       {/* Mobile top bar */}
@@ -47,12 +56,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
             variant="ghost"
             size="icon"
             aria-label="Abrir menú"
+            aria-expanded={mobileOpen}
             onClick={() => setMobileOpen((v) => !v)}
           >
             <Menu className="size-5" />
           </Button>
         </div>
       </header>
+
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-black/20 backdrop-blur-xs lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       <Suspense fallback={null}>
         <MobileNav open={mobileOpen} setOpen={setMobileOpen} />

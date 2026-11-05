@@ -25,7 +25,7 @@ export function CardInterestPanel({ projection }: CardInterestPanelProps) {
           <p className="text-base font-semibold tracking-tight">
             {formatDop(projection.payoffNowDop)}
           </p>
-          <p className="text-xs text-emerald-600">cero intereses</p>
+          <p className="text-xs text-emerald-600 dark:text-emerald-400">cero intereses</p>
         </div>
       </div>
 

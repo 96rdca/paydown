@@ -134,7 +134,7 @@ export function LoanAbonoSimulator({ loan, usdRate }: LoanAbonoSimulatorProps) {
         {hasSimulation && projection && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-lg bg-emerald-500/10 p-3">
+              <div className="rounded-lg bg-emerald-500/10 p-3 dark:bg-emerald-500/15">
                 <p className="flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400">
                   <Clock className="size-3" /> Meses ahorrados
                 </p>
@@ -142,7 +142,7 @@ export function LoanAbonoSimulator({ loan, usdRate }: LoanAbonoSimulatorProps) {
                   {projection.monthsSaved}
                 </p>
               </div>
-              <div className="rounded-lg bg-emerald-500/10 p-3">
+              <div className="rounded-lg bg-emerald-500/10 p-3 dark:bg-emerald-500/15">
                 <p className="flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400">
                   <TrendingDown className="size-3" /> Interés ahorrado
                 </p>
@@ -150,7 +150,7 @@ export function LoanAbonoSimulator({ loan, usdRate }: LoanAbonoSimulatorProps) {
                   {formatDop(projection.interestSaved)}
                 </p>
               </div>
-              <div className="rounded-lg bg-primary/10 p-3">
+              <div className="rounded-lg bg-primary/10 p-3 dark:bg-primary/15">
                 <p className="flex items-center gap-1 text-xs text-primary">
                   <Calendar className="size-3" /> Nueva fecha final
                 </p>

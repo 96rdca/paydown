@@ -44,7 +44,7 @@ function LoanCard({ loan }: { loan: AugmentedLoan }) {
             </div>
           </div>
           {loan.summary.interestSaved ? (
-            <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600">
+            <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <PiggyBank className="mr-1 size-3" /> Interés ahorrado{" "}
               {formatDop(loan.summary.interestSaved)}
             </Badge>
@@ -99,14 +99,14 @@ function LoanCard({ loan }: { loan: AugmentedLoan }) {
               </div>
               {loan.abonos.length > 0 ? (
                 <div>
-                  <p className="flex items-center gap-1 text-xs text-emerald-600">
+                  <p className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
                     <Sparkles className="size-3" /> Con tus abonos
                   </p>
-                  <p className="text-sm font-medium text-emerald-600">
+                  <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
                     {formatInteger(loan.projection.withAbonos.months)} meses ·{" "}
                     {formatDop(loan.projection.withAbonos.totalInterest)} intereses
                   </p>
-                  <p className="text-xs text-emerald-600">
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
                     Termina {formatDate(loan.projection.withAbonos.endDate)}
                   </p>
                   <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">

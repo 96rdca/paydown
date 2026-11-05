@@ -24,13 +24,13 @@ function statusBadge(status: LoanInstallment["status"]) {
   switch (status) {
     case "paid":
       return (
-        <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600">
+        <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
           Pagada
         </Badge>
       );
     case "extra":
       return (
-        <Badge variant="secondary" className="bg-blue-500/10 text-blue-600">
+        <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400">
           Abono
         </Badge>
       );

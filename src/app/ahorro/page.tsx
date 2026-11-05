@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
 import { getSnapshot } from "@/lib/sheets/snapshot";
-import { formatDop, formatDate } from "@/lib/format";
+import { formatDop, formatDate, percentage } from "@/lib/format";
 import { Footer } from "@/components/footer";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -90,7 +90,7 @@ async function AhorroContent() {
         <Card>
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground">Acumulado</p>
-            <p className="text-xl font-semibold text-emerald-600">
+            <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400">
               {formatDop(savings.current)}
             </p>
           </CardContent>
@@ -98,7 +98,7 @@ async function AhorroContent() {
         <Card>
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground">Progreso</p>
-            <p className="text-xl font-semibold">{progress.toFixed(1)}%</p>
+            <p className="text-xl font-semibold">{percentage(progress / 100)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -150,7 +150,7 @@ async function AhorroContent() {
                   key={week.week}
                   className={`rounded-lg border p-3 transition-colors ${
                     isLatest
-                      ? "border-emerald-500/50 bg-emerald-500/5"
+                      ? "border-emerald-500/50 bg-emerald-500/5 dark:border-emerald-500/30 dark:bg-emerald-500/10"
                       : "hover:bg-muted/30"
                   }`}
                 >
@@ -161,7 +161,7 @@ async function AhorroContent() {
                     {isLatest && (
                       <Badge
                         variant="secondary"
-                        className="bg-emerald-500/10 text-emerald-600"
+                        className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                       >
                         Actual
                       </Badge>

@@ -168,17 +168,17 @@ function CardItem({
                 variant="secondary"
                 className={
                   badgePct >= 80
-                    ? "bg-red-500/10 text-red-600"
+                    ? "bg-red-500/10 text-red-600 dark:text-red-400"
                     : badgePct >= 50
-                      ? "bg-amber-500/10 text-amber-600"
-                      : "bg-emerald-500/10 text-emerald-600"
+                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                 }
               >
                 {badgePct}%
               </Badge>
             )}
             {card.sharedLimitDopUsd && (
-              <Badge variant="outline" className="text-[10px] font-normal">
+              <Badge variant="outline" className="text-xs font-normal">
                 Límite compartido
               </Badge>
             )}

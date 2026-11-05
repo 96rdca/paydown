@@ -22,16 +22,22 @@ export function ConfigForm({ editable, initial }: ConfigFormProps) {
   const router = useRouter();
   const [info, setInfo] = React.useState<SnapshotInfo>(initial);
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const handleRefresh = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/snapshot?force=1");
-      if (res.ok) {
-        const data = (await res.json()) as SnapshotInfo;
-        setInfo(data);
+      if (!res.ok) {
+        setError("No se pudo actualizar. Intenta de nuevo.");
+        return;
       }
+      const data = (await res.json()) as SnapshotInfo;
+      setInfo(data);
       router.refresh();
+    } catch {
+      setError("No se pudo actualizar. Intenta de nuevo.");
     } finally {
       setLoading(false);
     }
@@ -118,6 +124,9 @@ export function ConfigForm({ editable, initial }: ConfigFormProps) {
                 </span>
               </div>
             </div>
+            {error && (
+              <p className="mt-3 text-xs text-destructive">{error}</p>
+            )}
             <Button
               onClick={handleRefresh}
               disabled={loading}

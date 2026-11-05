@@ -7,8 +7,8 @@ import { cn } from "cn";
 import {
   Calculator,
   CalendarDays,
-  ChevronRight,
   CreditCard,
+  Landmark,
   LayoutDashboard,
   Menu,
   Monitor,
@@ -31,7 +31,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/quincenas", label: "Quincenas", icon: Wallet },
   { href: "/tarjetas", label: "Tarjetas", icon: CreditCard },
-  { href: "/prestamos", label: "Préstamos", icon: ChevronRight },
+  { href: "/prestamos", label: "Préstamos", icon: Landmark },
   { href: "/ahorro", label: "Ahorro", icon: PiggyBank },
   { href: "/calendario", label: "Calendario", icon: CalendarDays },
   { href: "/calculadora", label: "Calculadora", icon: Calculator },

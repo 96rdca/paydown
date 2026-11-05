@@ -34,7 +34,10 @@ function parsePercentInput(value: string): number | null {
 
 function formatPercentInput(rate: number | null): string {
   if (rate === null || Number.isNaN(rate)) return "";
-  return (rate * 100).toFixed(2);
+  return new Intl.NumberFormat("es-DO", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(rate * 100);
 }
 
 export function CardRateDialog({

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import type { AugmentedCard } from "@/lib/types";
-import { Plus, Trash2, Receipt, CreditCard } from "lucide-react";
+import { Plus, Trash2, Receipt, CreditCard, Check, X, Loader2 } from "lucide-react";
 
 interface CardPaymentsProps {
   card: AugmentedCard;
@@ -28,6 +28,7 @@ export function CardPayments({ card }: CardPaymentsProps) {
   const [note, setNote] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [deleting, setDeleting] = React.useState<string | null>(null);
+  const [confirming, setConfirming] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const hasRecent = card.payments.some((p) => isRecentPayment(p.date));
@@ -68,15 +69,15 @@ export function CardPayments({ card }: CardPaymentsProps) {
       setNote("");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error desconocido.");
+      setError(err instanceof Error ? err.message : "No se pudo registrar el pago.");
     } finally {
       setSaving(false);
     }
   }
 
   async function deletePayment(id: string) {
-    if (!confirm("¿Eliminar este pago?")) return;
     setDeleting(id);
+    setError(null);
     try {
       const res = await fetch(`/api/overlay/card-payments/${encodeURIComponent(id)}`, {
         method: "DELETE",
@@ -87,9 +88,10 @@ export function CardPayments({ card }: CardPaymentsProps) {
       }
       router.refresh();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error desconocido.");
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el pago.");
     } finally {
       setDeleting(null);
+      setConfirming(null);
     }
   }
 
@@ -100,7 +102,7 @@ export function CardPayments({ card }: CardPaymentsProps) {
           <Receipt className="size-3.5 text-muted-foreground" /> Pagos registrados
         </h4>
         {hasRecent && (
-          <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600">
+          <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
             <CreditCard className="mr-1 size-3" /> pagado este ciclo
           </Badge>
         )}
@@ -127,50 +129,104 @@ export function CardPayments({ card }: CardPaymentsProps) {
                   <p className="truncate text-xs text-muted-foreground">{payment.note}</p>
                 )}
               </div>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label="Eliminar pago"
-                onClick={() => deletePayment(payment.id)}
-                disabled={deleting === payment.id}
-                className="shrink-0 text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
+              {confirming === payment.id ? (
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">¿Eliminar?</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => void deletePayment(payment.id)}
+                    disabled={deleting === payment.id}
+                    title="Sí, eliminar"
+                  >
+                    {deleting === payment.id ? (
+                      <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Check className="size-3 text-destructive" />
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => setConfirming(null)}
+                    disabled={deleting === payment.id}
+                    title="Cancelar"
+                  >
+                    <X className="size-3 text-muted-foreground" />
+                  </Button>
+                </span>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label="Eliminar pago"
+                  onClick={() => setConfirming(payment.id)}
+                  disabled={deleting === payment.id}
+                  className="shrink-0 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      <form onSubmit={addPayment} className="space-y-2 rounded-lg border p-3">
+      <form onSubmit={addPayment} className="space-y-3 rounded-lg border p-3">
         <p className="text-xs font-medium">Registrar pago</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="text-sm"
-          />
-          <Input
-            inputMode="decimal"
-            placeholder="Monto RD$"
-            value={amountDop}
-            onChange={(e) => setAmountDop(e.target.value)}
-            className="text-sm"
-          />
-          <Input
-            inputMode="decimal"
-            placeholder="Monto US$ (opcional)"
-            value={amountUsd}
-            onChange={(e) => setAmountUsd(e.target.value)}
-            className="text-sm"
-          />
-          <Input
-            placeholder="Nota (opcional)"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="text-sm"
-          />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <label htmlFor={`payment-date-${card.id}`} className="text-xs text-muted-foreground">
+              Fecha
+            </label>
+            <Input
+              id={`payment-date-${card.id}`}
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="text-sm"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor={`payment-dop-${card.id}`} className="text-xs text-muted-foreground">
+              Monto RD$
+            </label>
+            <Input
+              id={`payment-dop-${card.id}`}
+              inputMode="decimal"
+              placeholder="0.00"
+              value={amountDop}
+              onChange={(e) => setAmountDop(e.target.value)}
+              className="text-sm"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor={`payment-usd-${card.id}`} className="text-xs text-muted-foreground">
+              Monto US$ (opcional)
+            </label>
+            <Input
+              id={`payment-usd-${card.id}`}
+              inputMode="decimal"
+              placeholder="0.00"
+              value={amountUsd}
+              onChange={(e) => setAmountUsd(e.target.value)}
+              className="text-sm"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor={`payment-note-${card.id}`} className="text-xs text-muted-foreground">
+              Nota (opcional)
+            </label>
+            <Input
+              id={`payment-note-${card.id}`}
+              placeholder="Ej. Pago mínimo"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="text-sm"
+            />
+          </div>
         </div>
         {error && (
           <p className="text-xs text-destructive">{error}</p>

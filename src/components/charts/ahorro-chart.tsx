@@ -12,6 +12,7 @@ import {
   CartesianGrid,
   XAxis,
   YAxis,
+  Legend,
 } from "recharts";
 
 export interface AhorroChartData {
@@ -26,29 +27,30 @@ export function AhorroChart({ data }: { data: AhorroChartData[] }) {
       config={{
         deposito: {
           label: "Depósito",
-          color: "hsl(var(--chart-3))",
+          color: "var(--chart-3)",
         },
         acumulado: {
           label: "Acumulado",
-          color: "hsl(var(--chart-4))",
+          color: "var(--chart-4)",
         },
       }}
       className="aspect-[16/7]"
     >
       <BarChart data={data}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="semana" tick={{ fontSize: 10 }} />
+        <XAxis dataKey="semana" tick={{ fontSize: 12 }} />
         <YAxis
-          tick={{ fontSize: 10 }}
+          tick={{ fontSize: 12 }}
           tickFormatter={(v: number) => `RD$${(v / 1000).toFixed(0)}k`}
         />
+        <Legend iconType="rect" wrapperStyle={{ fontSize: 12 }} />
         <ChartTooltip
           content={
             <ChartTooltipContent
               labelFormatter={(label) => `Semana ${label}`}
-              formatter={(value) => [
+              formatter={(value, name) => [
                 formatDop(typeof value === "number" ? value : 0),
-                "",
+                name === "deposito" ? "Depósito" : "Acumulado",
               ]}
             />
           }

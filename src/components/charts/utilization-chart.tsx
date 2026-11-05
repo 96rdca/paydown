@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDop } from "@/lib/format";
+import { formatDop, percentage } from "@/lib/format";
 import {
   ChartContainer,
   ChartTooltip,
@@ -38,7 +38,7 @@ export function UtilizationChart({
       config={{
         utilizacion: {
           label: "Utilización %",
-          color: "hsl(var(--chart-1))",
+          color: "var(--chart-1)",
         },
       }}
       className="aspect-[4/3]"
@@ -50,7 +50,7 @@ export function UtilizationChart({
           dataKey="name"
           type="category"
           width={90}
-          tick={{ fontSize: 11 }}
+          tick={{ fontSize: 12 }}
         />
         <ChartTooltip
           content={
@@ -63,7 +63,7 @@ export function UtilizationChart({
                     (payload.balanceUsd ?? 0) * payload.rate;
                   return (
                     <span>
-                      {payload.utilizacion}% (
+                      {percentage(payload.utilizacion / 100)} (
                       {formatDop(combinedBalance)} / {formatDop(payload.limitDop)})
                     </span>
                   );
@@ -71,14 +71,14 @@ export function UtilizationChart({
 
                 const parts: string[] = [];
                 if (payload.dopUtil !== null) {
-                  parts.push(`DOP ${(payload.dopUtil * 100).toFixed(1)}%`);
+                  parts.push(`DOP ${percentage(payload.dopUtil)}`);
                 }
                 if (payload.usdUtil !== null) {
-                  parts.push(`USD ${(payload.usdUtil * 100).toFixed(1)}%`);
+                  parts.push(`USD ${percentage(payload.usdUtil)}`);
                 }
                 return (
                   <span>
-                    {payload.utilizacion}%
+                    {percentage(payload.utilizacion / 100)}
                     {parts.length > 0 && (
                       <>
                         {" "}({parts.join(" · ")})
@@ -93,7 +93,7 @@ export function UtilizationChart({
         <Bar
           dataKey="utilizacion"
           radius={[0, 4, 4, 0]}
-          fill="hsl(var(--chart-1))"
+          fill="var(--chart-1)"
         />
       </BarChart>
     </ChartContainer>

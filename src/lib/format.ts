@@ -10,6 +10,13 @@ const esNumberInt = new Intl.NumberFormat("es-DO", {
   maximumFractionDigits: 0,
 });
 
+function esPercent(decimals: number) {
+  return new Intl.NumberFormat("es-DO", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
 export function formatDop(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   return `RD$ ${esNumber.format(value)}`;
@@ -53,21 +60,21 @@ export function percentage(
   decimals = 1,
 ): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return `${(value * 100).toFixed(decimals)}%`;
+  return `${esPercent(decimals).format(value * 100)}%`;
 }
 
 export function formatAnnualRate(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return "—";
   }
-  return `${(value * 100).toFixed(2)}%`;
+  return `${esPercent(2).format(value * 100)}%`;
 }
 
 export function formatMonthlyRate(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return "—";
   }
-  return `${(value * 100).toFixed(2)}%/mes`;
+  return `${esPercent(2).format(value * 100)}%/mes`;
 }
 
 const esDate = new Intl.DateTimeFormat("es-DO", {

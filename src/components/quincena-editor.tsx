@@ -249,7 +249,7 @@ export function AddExpenseForm({ periodId, defaultOpen = false }: AddExpenseForm
       </div>
       <div className="flex items-start gap-1 sm:pt-5">
         <Button type="submit" size="sm" disabled={saving}>
-          {saving ? <Loader2 className="size-4 animate-spin" /> : "Guardar"}
+          {saving ? <Loader2 className="size-4 animate-spin" /> : "Agregar"}
         </Button>
         <Button
           type="button"

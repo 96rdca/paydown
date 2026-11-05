@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Database, CreditCard, Receipt, PiggyBank } from "lucide-react";
 import type { FinancialState } from "@/lib/types";
 
@@ -58,10 +57,10 @@ export function LocalDataCard({ state }: LocalDataCardProps) {
             </div>
           </div>
         </div>
-        <Badge variant="outline" className="text-xs font-normal">
+        <p className="text-xs text-muted-foreground">
           Los abonos y tasas se guardan localmente en la app; la hoja sigue siendo la fuente
           oficial.
-        </Badge>
+        </p>
       </CardContent>
     </Card>
   );

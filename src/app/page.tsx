@@ -8,6 +8,7 @@ import {
   formatDateShort,
   relativeDayLabel,
   isoDayOfMonth,
+  percentage,
 } from "@/lib/format";
 import { Footer } from "@/components/footer";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -304,7 +305,7 @@ async function DashboardContent() {
                   +{formatDop(monthlyInflow)} mensuales esperados
                 </p>
               </div>
-              <div className="rounded-lg bg-amber-500/10 p-2 text-amber-600">
+              <div className="rounded-lg bg-amber-500/10 p-2 text-amber-600 dark:text-amber-400">
                 <Wallet className="size-5" />
               </div>
             </div>
@@ -325,7 +326,7 @@ async function DashboardContent() {
                   Meta: {formatDop(savingsTarget)}
                 </p>
               </div>
-              <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-600">
+              <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-600 dark:text-emerald-400">
                 <PiggyBank className="size-5" />
               </div>
             </div>
@@ -347,7 +348,7 @@ async function DashboardContent() {
                   {formatUsd(snapshot.cardTotals.availableUsd)}
                 </p>
               </div>
-              <div className="rounded-lg bg-blue-500/10 p-2 text-blue-600">
+              <div className="rounded-lg bg-blue-500/10 p-2 text-blue-600 dark:text-blue-400">
                 <DollarSign className="size-5" />
               </div>
             </div>
@@ -374,7 +375,7 @@ async function DashboardContent() {
         </Card>
 
         {hasConfiguredCardRate && (
-          <Card>
+          <Card className="lg:col-span-2">
             <CardContent className="pt-5">
               <div className="flex items-start justify-between">
                 <div>
@@ -388,7 +389,7 @@ async function DashboardContent() {
                     Basado en tarjetas con tasa configurada
                   </p>
                 </div>
-                <div className="rounded-lg bg-amber-500/10 p-2 text-amber-600">
+                <div className="rounded-lg bg-amber-500/10 p-2 text-amber-600 dark:text-amber-400">
                   <Percent className="size-5" />
                 </div>
               </div>
@@ -420,7 +421,7 @@ async function DashboardContent() {
                       }
                       className={
                         period.surplusDop >= 0
-                          ? "bg-emerald-500/10 text-emerald-600"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                           : ""
                       }
                     >
@@ -478,10 +479,10 @@ async function DashboardContent() {
                         variant="outline"
                         className={
                           p.type === "tarjeta"
-                            ? "border-blue-200 text-blue-600"
+                            ? "border-blue-200 text-blue-600 dark:border-blue-500/30 dark:text-blue-400"
                             : p.type === "prestamo"
-                              ? "border-amber-200 text-amber-600"
-                              : "border-red-200 text-red-600"
+                              ? "border-amber-200 text-amber-600 dark:border-amber-500/30 dark:text-amber-400"
+                              : "border-red-200 text-red-600 dark:border-red-500/30 dark:text-red-400"
                         }
                       >
                         {p.type === "tarjeta"
@@ -523,7 +524,7 @@ async function DashboardContent() {
           <CardHeader>
             <CardTitle>Curva de saldo de préstamos</CardTitle>
             <CardDescription>
-              {autoLoan ? autoLoan.name : "Auto Loan"}
+              {autoLoan ? autoLoan.name : "Préstamo de auto"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -582,7 +583,7 @@ async function DashboardContent() {
               </span>
               <Badge
                 variant="secondary"
-                className="bg-emerald-500/10 text-emerald-600"
+                className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
               >
                 {percentage(savingsCurrent / savingsTarget)}
               </Badge>
@@ -610,7 +611,3 @@ export default function DashboardPage() {
   );
 }
 
-function percentage(value: number): string {
-  if (Number.isNaN(value)) return "—";
-  return `${(value * 100).toFixed(1)}%`;
-}

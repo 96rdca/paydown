@@ -157,16 +157,16 @@ export default function CalculadoraPage() {
               config={{
                 saldo: {
                   label: "Saldo restante",
-                  color: "hsl(var(--chart-5))",
+                  color: "var(--chart-5)",
                 },
               }}
               className="aspect-[4/3]"
             >
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
                 <YAxis
-                  tick={{ fontSize: 10 }}
+                  tick={{ fontSize: 12 }}
                   tickFormatter={(v: number) =>
                     `RD$${(v / 1000).toFixed(0)}k`
                   }
@@ -185,7 +185,7 @@ export default function CalculadoraPage() {
                 <Line
                   type="monotone"
                   dataKey="saldo"
-                  stroke="hsl(var(--chart-5))"
+                  stroke="var(--chart-5)"
                   strokeWidth={2}
                   dot={false}
                 />

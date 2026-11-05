@@ -154,11 +154,12 @@ function SaveCancelButtons({
         onMouseDown={(e) => e.preventDefault()}
         disabled={saving}
         title="Guardar"
+        aria-label="Guardar"
       >
         {saving ? (
           <Loader2 className="size-3 animate-spin text-muted-foreground" />
         ) : (
-          <Check className="size-3 text-emerald-600" />
+          <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
         )}
       </Button>
       <Button
@@ -169,6 +170,7 @@ function SaveCancelButtons({
         onMouseDown={(e) => e.preventDefault()}
         disabled={saving}
         title="Cancelar"
+        aria-label="Cancelar"
       >
         <X className="size-3 text-muted-foreground" />
       </Button>
@@ -606,8 +608,8 @@ export function CuotaStatusButton({ status, save }: CuotaStatusButtonProps) {
         title={isPaid ? "Marcar como pendiente" : "Marcar como pagada"}
         className={cn(
           isPaid
-            ? "text-amber-600 hover:bg-amber-500/10 hover:text-amber-700"
-            : "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:text-emerald-700",
+            ? "text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+            : "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:text-emerald-300",
         )}
       >
         {saving ? (

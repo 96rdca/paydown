@@ -26,16 +26,16 @@ export function LoanBalanceChart({ data }: { data: LoanBalanceChartData[] }) {
       config={{
         saldo: {
           label: "Saldo restante",
-          color: "hsl(var(--chart-2))",
+          color: "var(--chart-2)",
         },
       }}
       className="aspect-[4/3]"
     >
       <LineChart data={data}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="cuota" tick={{ fontSize: 10 }} />
+        <XAxis dataKey="cuota" tick={{ fontSize: 12 }} />
         <YAxis
-          tick={{ fontSize: 10 }}
+          tick={{ fontSize: 12 }}
           tickFormatter={(v: number) => `RD$${(v / 1000).toFixed(0)}k`}
         />
         <ChartTooltip
@@ -52,7 +52,7 @@ export function LoanBalanceChart({ data }: { data: LoanBalanceChartData[] }) {
         <Line
           type="monotone"
           dataKey="saldo"
-          stroke="hsl(var(--chart-2))"
+          stroke="var(--chart-2)"
           strokeWidth={2}
           dot={false}
         />

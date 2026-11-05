@@ -34,23 +34,23 @@ const kindIcon: Record<CalendarEvent["kind"], React.ReactNode> = {
 };
 
 const kindChipClass: Record<CalendarEvent["kind"], string> = {
-  "card-due": "bg-blue-500/10 text-blue-700 border-blue-500/20",
-  "card-cutoff": "bg-slate-500/10 text-slate-600 border-slate-500/20",
-  cuota: "bg-amber-500/10 text-amber-700 border-amber-500/20",
-  debt: "bg-red-500/10 text-red-700 border-red-500/20",
-  salary: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
-  payment: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
-  abono: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
+  "card-due": "bg-blue-500/10 text-blue-700 border-blue-500/20 dark:bg-blue-500/15 dark:text-blue-400",
+  "card-cutoff": "bg-slate-500/10 text-slate-600 border-slate-500/20 dark:bg-slate-500/15 dark:text-slate-400",
+  cuota: "bg-amber-500/10 text-amber-700 border-amber-500/20 dark:bg-amber-500/15 dark:text-amber-400",
+  debt: "bg-red-500/10 text-red-700 border-red-500/20 dark:bg-red-500/15 dark:text-red-400",
+  salary: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-400",
+  payment: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-400",
+  abono: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-400",
 };
 
 const kindBadgeClass: Record<CalendarEvent["kind"], string> = {
-  "card-due": "bg-blue-100 text-blue-700 hover:bg-blue-100",
-  "card-cutoff": "bg-slate-100 text-slate-700 hover:bg-slate-100",
-  cuota: "bg-amber-100 text-amber-700 hover:bg-amber-100",
-  debt: "bg-red-100 text-red-700 hover:bg-red-100",
-  salary: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
-  payment: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
-  abono: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
+  "card-due": "bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-400",
+  "card-cutoff": "bg-slate-100 text-slate-700 hover:bg-slate-100 dark:bg-slate-500/10 dark:text-slate-400",
+  cuota: "bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-400",
+  debt: "bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400",
+  salary: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400",
+  payment: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400",
+  abono: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400",
 };
 
 function toISODate(year: number, monthIndex: number, day: number): string {
@@ -70,8 +70,8 @@ function urgencyChipClass(event: CalendarEvent): string | null {
     return null;
   }
   const label = relativeDayLabel(event.date);
-  if (label === "vencido") return "bg-red-500/10 text-red-700 border-red-500/20";
-  if (label === "hoy") return "bg-amber-500/10 text-amber-700 border-amber-500/20";
+  if (label === "vencido") return "bg-red-500/10 text-red-700 border-red-500/20 dark:bg-red-500/15 dark:text-red-400";
+  if (label === "hoy") return "bg-amber-500/10 text-amber-700 border-amber-500/20 dark:bg-amber-500/15 dark:text-amber-400";
   return null;
 }
 
@@ -83,8 +83,8 @@ function CountdownBadge({ date }: { date: string }) {
     <Badge
       variant="outline"
       className={cn(
-        overdue && "border-red-400 text-red-600",
-        today && "border-amber-500 text-amber-600",
+        overdue && "border-red-400 text-red-600 dark:border-red-500/30 dark:text-red-400",
+        today && "border-amber-500 text-amber-600 dark:border-amber-500/30 dark:text-amber-400",
         !overdue && !today && "text-muted-foreground",
       )}
     >
@@ -174,13 +174,27 @@ export function CalendarView({ state, editable }: CalendarViewProps) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="icon-xs" onClick={previousMonth}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-xs"
+            onClick={previousMonth}
+            aria-label="Mes anterior"
+            title="Mes anterior"
+          >
             <ChevronLeft className="size-4" />
           </Button>
           <h2 className="min-w-44 text-center text-lg font-semibold capitalize">
             {monthYearLabel(year, monthIndex)}
           </h2>
-          <Button type="button" variant="outline" size="icon-xs" onClick={nextMonth}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-xs"
+            onClick={nextMonth}
+            aria-label="Mes siguiente"
+            title="Mes siguiente"
+          >
             <ChevronRight className="size-4" />
           </Button>
         </div>
@@ -289,7 +303,7 @@ function DayCell({
             <span
               key={event.id}
               className={cn(
-                "block truncate rounded border px-1.5 py-0.5 text-[10px] leading-tight font-medium",
+                "block truncate rounded border px-1.5 py-0.5 text-xs leading-tight font-medium",
                 urgencyChipClass(event) ?? kindChipClass[event.kind],
               )}
             >
@@ -297,7 +311,7 @@ function DayCell({
             </span>
           ))}
           {overflow > 0 && (
-            <span className="text-[10px] text-muted-foreground">+{overflow} más</span>
+            <span className="text-xs text-muted-foreground">+{overflow} más</span>
           )}
         </div>
       )}

@@ -68,7 +68,7 @@ function PeriodPanel({
             <p className="text-xs text-muted-foreground">Sobrante</p>
             <p
               className={`text-xl font-semibold ${
-                period.surplusDop >= 0 ? "text-emerald-600" : "text-destructive"
+                period.surplusDop >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
               }`}
             >
               {formatDop(period.surplusDop)}
@@ -93,7 +93,7 @@ function PeriodPanel({
               <TableRow>
                 <TableHead>Concepto</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
-                <TableHead className="text-right">Nota</TableHead>
+                <TableHead className="text-right">Moneda</TableHead>
                 {editable && <TableHead className="text-right">Acción</TableHead>}
               </TableRow>
             </TableHeader>
@@ -165,10 +165,10 @@ async function QuincenasContent() {
           <TabsTrigger value="Q30">Q 30</TabsTrigger>
         </TabsList>
         <TabsContent value="Q15" className="mt-4">
-          {q15 ? <PeriodPanel period={q15} editable={editable} /> : <p>Sin datos.</p>}
+          {q15 ? <PeriodPanel period={q15} editable={editable} /> : <p>No hay datos para la quincena Q 15.</p>}
         </TabsContent>
         <TabsContent value="Q30" className="mt-4">
-          {q30 ? <PeriodPanel period={q30} editable={editable} /> : <p>Sin datos.</p>}
+          {q30 ? <PeriodPanel period={q30} editable={editable} /> : <p>No hay datos para la quincena Q 30.</p>}
         </TabsContent>
       </Tabs>
 
